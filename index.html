@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ミニERPシステム</title>
+    <title>TSHERPシステム</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide-react@0.378.0/dist/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
@@ -31,7 +31,7 @@
         <aside class="w-64 bg-slate-900 text-slate-200 flex flex-col">
             <div class="p-4 border-b border-slate-700 flex flex-col items-center text-center">
                 <img src="https://placehold.co/120x50/0f172a/FFFFFF?text=Logo" alt="Company Logo" class="mb-4 h-12 rounded-md">
-                <h1 class="text-xl font-bold text-white">ミニERP</h1>
+                <h1 class="text-xl font-bold text-white">東京精密発條株式会社ERPシステム</h1>
                 <p class="text-xs text-slate-400 mt-2">Design by Wahyu</p>
             </div>
             <nav class="flex-1 p-3 space-y-2">
@@ -75,7 +75,7 @@
                     <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-slate-200"><th class="p-4 text-sm font-semibold text-slate-600">PO番号</th><th class="p-4 text-sm font-semibold text-slate-600">顧客名</th><th class="p-4 text-sm font-semibold text-slate-600">日付</th><th class="p-4 text-sm font-semibold text-slate-600">ステータス</th><th class="p-4 text-sm font-semibold text-slate-600">アクション</th></tr></thead><tbody id="po-table-body" class="divide-y divide-slate-200"></tbody></table></div>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200 mt-8">
-                    <h3 class="text-xl font-bold text-slate-800 mb-4">作業指示書 (WO)</h3>
+                    <h3 class="text-xl font-bold text-slate-800 mb-4">生産現品票 (WO)</h3>
                     <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-slate-200"><th class="p-4 text-sm font-semibold text-slate-600">WO番号</th><th class="p-4 text-sm font-semibold text-slate-600">PO由来</th><th class="p-4 text-sm font-semibold text-slate-600">工程ステータス</th><th class="p-4 text-sm font-semibold text-slate-600">アクション</th></tr></thead><tbody id="wo-table-body" class="divide-y divide-slate-200"></tbody></table></div>
                 </div>
             </div>
@@ -96,7 +96,7 @@
                 <h2 class="text-3xl font-bold text-slate-900 tracking-tight mb-8">作業ステーション</h2>
                 <div class="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-slate-200">
                     <h3 class="text-xl font-bold text-center text-slate-800 mb-2">工程ステータス更新</h3>
-                    <p class="text-center text-slate-500 mb-6">作業指示番号を入力またはスキャンしてください。</p>
+                    <p class="text-center text-slate-500 mb-6">生産現品票番号を入力またはスキャンしてください。</p>
                     <div id="qr-reader" class="w-full mb-4" style="display: none;"></div>
                     <div class="flex gap-2">
                         <input type="text" id="wo-scan-input" placeholder="WO番号" class="flex-grow px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
