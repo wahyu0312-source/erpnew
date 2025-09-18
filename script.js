@@ -18,9 +18,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- INISIALISASI ---
     function initializeAppLogic() {
-        // Tampilkan halaman dashboard secara default saat aplikasi dimuat
-        document.getElementById('dashboard').classList.remove('hidden');
-        
         setupNavigation();
         setupEventListeners();
         initializeCharts();
@@ -31,19 +28,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- MANAJEMEN UI & NAVIGASI ---
     function setupNavigation() {
-        document.querySelectorAll('.sidebar-link').forEach(link => {
+        const sidebarLinks = document.querySelectorAll('.sidebar-link');
+        
+        sidebarLinks.forEach(link => {
             link.addEventListener('click', (e) => {
+                // Jangan lakukan apa-apa jika ini adalah link eksternal
+                if (link.hasAttribute('target')) {
+                    return;
+                }
+                
                 e.preventDefault();
-                stopScanner(); // Selalu matikan scanner saat berganti halaman
+                stopScanner();
                 const viewId = link.getAttribute('data-view');
                 
                 // Sembunyikan semua halaman
-                document.querySelectorAll('.view').forEach(view => view.classList.add('hidden'));
+                document.querySelectorAll('.view').forEach(view => {
+                    view.classList.add('hidden');
+                });
                 // Tampilkan halaman yang dipilih
-                document.getElementById(viewId).classList.remove('hidden');
+                const targetView = document.getElementById(viewId);
+                if (targetView) {
+                    targetView.classList.remove('hidden');
+                }
 
                 // Update style link yang aktif
-                document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('sidebar-active'));
+                sidebarLinks.forEach(l => l.classList.remove('sidebar-active'));
                 link.classList.add('sidebar-active');
             });
         });
@@ -52,15 +61,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Fungsi untuk menampilkan dan menyembunyikan modal (pop-up)
     const toggleModal = (modalId, show) => {
         const modal = document.getElementById(modalId);
-        if (show) modal.classList.add('flex');
-        else modal.classList.remove('flex');
+        if (modal) {
+            modal.style.display = show ? 'flex' : 'none';
+        }
     };
 
     // Fungsi untuk menampilkan dan menyembunyikan spinner loading
     const showSpinner = (show) => {
         const spinner = document.getElementById('loading-spinner');
-        if (show) spinner.classList.remove('hidden');
-        else spinner.classList.add('hidden');
+        if (spinner) {
+            spinner.style.display = show ? 'flex' : 'none';
+        }
     }
 
     // Mendaftarkan semua event listener untuk tombol dan form
@@ -88,7 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // --- PENGAMBILAN DATA (API CALLS) ---
-    // Fungsi terpusat untuk semua komunikasi dengan Google Apps Script
     async function apiCall(method, action, data = {}) {
         showSpinner(true);
         try {
@@ -118,7 +128,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Mengambil semua data awal saat aplikasi dimuat
     async function fetchInitialData() {
         const data = await apiCall('GET', 'getData');
         if (data && data.status === 'success') {
@@ -150,7 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Purchase Orders
     async function handlePOSubmit(e) {
         e.preventDefault();
         const poData = {
@@ -188,7 +196,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.create-wo-btn').forEach(btn => btn.addEventListener('click', createWOFromPO));
     }
     
-    // Work Orders
     async function createWOFromPO(e) {
         const poId = e.target.dataset.poId;
         const poNumber = e.target.dataset.poNumber;
@@ -232,7 +239,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderWOsOnDashboard(state.workOrders.filter(d => ![NG_STATUS, "完了＆請求済み"].includes(d.status)).slice(-5).reverse());
     }
 
-    // Inventory
     async function handleInventorySubmit(e) {
         e.preventDefault();
         const invData = {
@@ -291,7 +297,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Operator Station & QR Scanner
     function startScanner() {
         const onScanSuccess = (decodedText, decodedResult) => {
             document.getElementById('wo-scan-input').value = decodedText;
