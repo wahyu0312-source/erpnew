@@ -1,4 +1,5 @@
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzV1Ls8bmFrUJtggUcn7zXt5lesCMPeJx2oX13em1l2-ekAx5GMT_X4KfsQ5mWynBlM/exec';
+// !!! PENTING: Ganti URL ini dengan URL Web App dari Google Apps Script Anda !!!
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyJ5YR96hzYFcAW9KGAUAosd6DB-EGZMTjLs1Az56MxioTb48V-F7rojrOEHGWiioih/exec';
 
 document.addEventListener('DOMContentLoaded', () => {
     // State global untuk menyimpan data
