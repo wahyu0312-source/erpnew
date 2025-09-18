@@ -1,4 +1,4 @@
-const SCRIPT_URL = ' https://script.google.com/macros/s/AKfycbxqwHQsLpXQU26HBNV5DXJBSjSCT9nRbj7O34A3afhY5iLFM6yIPHyrVhEQjDSJpB-o/exec ';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2xFkKAGvXosWx2KZzKgYlemzoV-0mOvf6JHRm1x-tOp_hxFMxzb6g26YGbUcX3_pV/exec';
 
 document.addEventListener('DOMContentLoaded', () => {
     // State global
