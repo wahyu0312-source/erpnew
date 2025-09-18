@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TSH ERP system</title>
+    <title>ミニERPシステム</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide-react@0.378.0/dist/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
@@ -11,23 +11,13 @@
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <link rel="stylesheet" href="style.css">
     <script>
-        // Custom Tailwind CSS Configuration for a Figma-like feel
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
-                        primary: {
-                            DEFAULT: '#4f46e5', // Indigo 600
-                            hover: '#4338ca', // Indigo 700
-                            light: '#e0e7ff' // Indigo 100
-                        },
-                        secondary: '#10b981', // Emerald 500
-                        danger: '#ef4444',   // Red 500
-                        slate: {
-                            50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#cbd5e1',
-                            400: '#94a3b8', 500: '#64748b', 600: '#475569', 700: '#334155',
-                            800: '#1e293b', 900: '#0f172a'
-                        }
+                        primary: { DEFAULT: '#4f46e5', hover: '#4338ca', light: '#e0e7ff' },
+                        secondary: '#10b981', danger: '#ef4444', 
+                        slate: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#cbd5e1', 400: '#94a3b8', 500: '#64748b', 600: '#475569', 700: '#334155', 800: '#1e293b', 900: '#0f172a' }
                     }
                 }
             }
@@ -40,43 +30,29 @@
         <!-- Sidebar Navigation -->
         <aside class="w-64 bg-slate-900 text-slate-200 flex flex-col">
             <div class="p-4 border-b border-slate-700 flex flex-col items-center text-center">
-                <!-- LOGO PERUSAHAAN -->
-                <img src="tsh.png" alt="Company Logo" class="mb-4 h-12 rounded-md">
-                <h1 class="text-xl font-bold text-white">東京精密発條株式会社ERPシステム</h1>
+                <img src="https://placehold.co/120x50/0f172a/FFFFFF?text=Logo" alt="Company Logo" class="mb-4 h-12 rounded-md">
+                <h1 class="text-xl font-bold text-white">ミニERP</h1>
                 <p class="text-xs text-slate-400 mt-2">Design by Wahyu</p>
             </div>
             <nav class="flex-1 p-3 space-y-2">
-                <a href="#" data-view="dashboard" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700 sidebar-active">
-                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i> ダッシュボード
-                </a>
-                <a href="#" data-view="orders" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700">
-                    <i data-lucide="shopping-cart" class="w-5 h-5"></i> 注文管理
-                </a>
-                <a href="#" data-view="inventory" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700">
-                    <i data-lucide="boxes" class="w-5 h-5"></i> 在庫管理
-                </a>
-                <a href="#" data-view="station" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700">
-                    <i data-lucide="scan-line" class="w-5 h-5"></i> 作業ステーション
-                </a>
+                <a href="#" data-view="dashboard" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700 sidebar-active"><i data-lucide="layout-dashboard" class="w-5 h-5"></i> ダッシュボード</a>
+                <a href="#" data-view="orders" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700"><i data-lucide="shopping-cart" class="w-5 h-5"></i> 注文管理</a>
+                <a href="#" data-view="inventory" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700"><i data-lucide="boxes" class="w-5 h-5"></i> 在庫管理</a>
+                <a href="#" data-view="station" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700"><i data-lucide="scan-line" class="w-5 h-5"></i> 作業ステーション</a>
             </nav>
-            <div class="p-4 border-t border-slate-700 text-center">
-                <p class="text-xs text-slate-500">Ver 1.4 - Figma Inspired</p>
-            </div>
+            <!-- Teks versi telah dihapus dari sini -->
         </aside>
 
         <!-- Main Content -->
         <main class="flex-1 p-8 overflow-y-auto">
-            <!-- Loading Spinner -->
-            <div id="loading-spinner" class="hidden fixed inset-0 bg-white bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm">
-                <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-primary"></div>
-            </div>
+            <div id="loading-spinner" class="hidden fixed inset-0 bg-white bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm"><div class="animate-spin rounded-full h-16 w-16 border-b-4 border-primary"></div></div>
 
             <!-- Dashboard View -->
-            <div id="dashboard" class="view active">
+            <div id="dashboard" class="view">
                 <h2 class="text-3xl font-bold text-slate-900 tracking-tight mb-8">ダッシュボード</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                     <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200 flex items-center gap-5"><div class="bg-primary-light p-3 rounded-full"><i data-lucide="package" class="text-primary"></i></div><div><h3 class="text-slate-500 text-sm font-medium">総受注件数</h3><p id="total-po" class="text-3xl font-bold text-slate-800 mt-1">0</p></div></div>
-                    <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200 flex items-center gap-5"><div class="bg-yellow-100 p-3 rounded-full"><i data-lucide="loader-circle" class="text-yellow-600"></i></div><div><h3 class="text-slate-500 text-sm font-medium">進行中の作業指示</h3><p id="active-wo" class="text-3xl font-bold text-slate-800 mt-1">0</p></div></div>
+                    <div class="bg-yellow-100 p-6 rounded-xl shadow-lg border border-yellow-200 flex items-center gap-5"><div class="bg-yellow-200 p-3 rounded-full"><i data-lucide="loader-circle" class="text-yellow-600"></i></div><div><h3 class="text-slate-500 text-sm font-medium">進行中の作業指示</h3><p id="active-wo" class="text-3xl font-bold text-slate-800 mt-1">0</p></div></div>
                     <div class="bg-green-100 p-6 rounded-xl shadow-lg border border-green-200 flex items-center gap-5"><div class="bg-green-200 p-3 rounded-full"><i data-lucide="check-circle" class="text-green-600"></i></div><div><h3 class="text-slate-500 text-sm font-medium">出荷準備完了</h3><p id="ready-to-ship" class="text-3xl font-bold text-slate-800 mt-1">0</p></div></div>
                     <div class="bg-red-100 p-6 rounded-xl shadow-lg border border-red-200 flex items-center gap-5"><div class="bg-red-200 p-3 rounded-full"><i data-lucide="x-circle" class="text-red-600"></i></div><div><h3 class="text-slate-500 text-sm font-medium">保留 (NG)</h3><p id="hold-ng" class="text-3xl font-bold text-red-600 mt-1">0</p></div></div>
                 </div>
@@ -89,7 +65,7 @@
             </div>
 
             <!-- Orders View -->
-            <div id="orders" class="view">
+            <div id="orders" class="view hidden">
                 <div class="flex justify-between items-center mb-8">
                     <h2 class="text-3xl font-bold text-slate-900 tracking-tight">注文管理</h2>
                     <button id="add-po-btn" class="bg-primary text-white px-5 py-2.5 rounded-lg hover:bg-primary-hover flex items-center gap-2 shadow-md transition-colors duration-200 font-semibold"><i data-lucide="plus-circle" class="w-5 h-5"></i> 新規PO追加</button>
@@ -99,13 +75,13 @@
                     <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-slate-200"><th class="p-4 text-sm font-semibold text-slate-600">PO番号</th><th class="p-4 text-sm font-semibold text-slate-600">顧客名</th><th class="p-4 text-sm font-semibold text-slate-600">日付</th><th class="p-4 text-sm font-semibold text-slate-600">ステータス</th><th class="p-4 text-sm font-semibold text-slate-600">アクション</th></tr></thead><tbody id="po-table-body" class="divide-y divide-slate-200"></tbody></table></div>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200 mt-8">
-                    <h3 class="text-xl font-bold text-slate-800 mb-4">生産現品票 (WO)</h3>
+                    <h3 class="text-xl font-bold text-slate-800 mb-4">作業指示書 (WO)</h3>
                     <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-slate-200"><th class="p-4 text-sm font-semibold text-slate-600">WO番号</th><th class="p-4 text-sm font-semibold text-slate-600">PO由来</th><th class="p-4 text-sm font-semibold text-slate-600">工程ステータス</th><th class="p-4 text-sm font-semibold text-slate-600">アクション</th></tr></thead><tbody id="wo-table-body" class="divide-y divide-slate-200"></tbody></table></div>
                 </div>
             </div>
 
             <!-- Inventory View -->
-            <div id="inventory" class="view">
+            <div id="inventory" class="view hidden">
                 <div class="flex justify-between items-center mb-8">
                     <h2 class="text-3xl font-bold text-slate-900 tracking-tight">在庫管理</h2>
                     <button id="add-inventory-btn" class="bg-secondary text-white px-5 py-2.5 rounded-lg hover:bg-emerald-600 flex items-center gap-2 shadow-md transition-colors duration-200 font-semibold"><i data-lucide="plus-circle" class="w-5 h-5"></i> 新規品目追加</button>
@@ -116,11 +92,11 @@
             </div>
             
             <!-- Operator Station View -->
-            <div id="station" class="view">
+            <div id="station" class="view hidden">
                 <h2 class="text-3xl font-bold text-slate-900 tracking-tight mb-8">作業ステーション</h2>
                 <div class="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-slate-200">
                     <h3 class="text-xl font-bold text-center text-slate-800 mb-2">工程ステータス更新</h3>
-                    <p class="text-center text-slate-500 mb-6">生産現品票番号を入力またはスキャンしてください。</p>
+                    <p class="text-center text-slate-500 mb-6">作業指示番号を入力またはスキャンしてください。</p>
                     <div id="qr-reader" class="w-full mb-4" style="display: none;"></div>
                     <div class="flex gap-2">
                         <input type="text" id="wo-scan-input" placeholder="WO番号" class="flex-grow px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
