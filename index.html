@@ -31,7 +31,7 @@
         <aside class="w-64 bg-slate-900 text-slate-200 flex flex-col">
             <div class="p-4 border-b border-slate-700 flex flex-col items-center text-center">
                 <img src="https://placehold.co/120x50/0f172a/FFFFFF?text=Logo" alt="Company Logo" class="mb-4 h-12 rounded-md">
-                <h1 class="text-xl font-bold text-white">Tohatsu ERP Portal</h1>
+                <h1 class="text-xl font-bold text-white">ミニERP</h1>
                 <p class="text-xs text-slate-400 mt-2">Design by Wahyu</p>
             </div>
             <nav class="flex-1 p-3 space-y-2">
@@ -40,7 +40,6 @@
                 <a href="#" data-view="inventory" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700"><i data-lucide="boxes" class="w-5 h-5"></i> 在庫管理</a>
                 <a href="#" data-view="station" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700"><i data-lucide="scan-line" class="w-5 h-5"></i> 作業ステーション</a>
                 
-                <!-- TOMBOL KUALITAS PORTAL BARU -->
                 <a href="https://kensa-portal.vercel.app" target="_blank" rel="noopener noreferrer" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700">
                     <i data-lucide="shield-check" class="w-5 h-5"></i> 品質ポータル
                 </a>
@@ -51,7 +50,7 @@
         <main class="flex-1 p-8 overflow-y-auto">
             <div id="loading-spinner" class="hidden fixed inset-0 bg-white bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm"><div class="animate-spin rounded-full h-16 w-16 border-b-4 border-primary"></div></div>
 
-            <!-- Dashboard View (Terlihat secara default) -->
+            <!-- Dashboard View -->
             <div id="dashboard" class="view">
                 <h2 class="text-3xl font-bold text-slate-900 tracking-tight mb-8">ダッシュボード</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -65,10 +64,10 @@
                     <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200"><h3 class="text-lg font-bold text-slate-700 mb-4 text-center">出荷状況</h3><canvas id="shippedChart"></canvas></div>
                     <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200"><h3 class="text-lg font-bold text-slate-700 mb-4 text-center">請求状況</h3><canvas id="invoiceChart"></canvas></div>
                 </div>
-                <div class="mt-8 bg-white p-6 rounded-xl shadow-lg border border-slate-200"><h3 class="text-lg font-bold text-slate-700 mb-4">最新の作業指示書追跡</h3><div id="latest-wo-tracking" class="space-y-4"><p class="text-slate-500">アクティブな作業指示はありません。</p></div></div>
+                <div class="mt-8 bg-white p-6 rounded-xl shadow-lg border border-slate-200"><h3 class="text-lg font-bold text-slate-700 mb-4">最新の作業指示追跡</h3><div id="latest-wo-tracking" class="space-y-4"><p class="text-slate-500">アクティブな作業指示はありません。</p></div></div>
             </div>
 
-            <!-- Orders View (Tersembunyi secara default) -->
+            <!-- Orders View -->
             <div id="orders" class="view hidden">
                 <div class="flex justify-between items-center mb-8">
                     <h2 class="text-3xl font-bold text-slate-900 tracking-tight">注文管理</h2>
@@ -84,9 +83,9 @@
                 </div>
             </div>
 
-            <!-- Inventory View (Tersembunyi secara default) -->
+            <!-- Inventory View -->
             <div id="inventory" class="view hidden">
-                <div class="flex justify-between items-center mb-8">
+                 <div class="flex justify-between items-center mb-8">
                     <h2 class="text-3xl font-bold text-slate-900 tracking-tight">在庫管理</h2>
                     <button id="add-inventory-btn" class="bg-secondary text-white px-5 py-2.5 rounded-lg hover:bg-emerald-600 flex items-center gap-2 shadow-md transition-colors duration-200 font-semibold"><i data-lucide="plus-circle" class="w-5 h-5"></i> 新規品目追加</button>
                 </div>
@@ -95,7 +94,7 @@
                 </div>
             </div>
             
-            <!-- Operator Station View (Tersembunyi secara default) -->
+            <!-- Operator Station View -->
             <div id="station" class="view hidden">
                 <h2 class="text-3xl font-bold text-slate-900 tracking-tight mb-8">作業ステーション</h2>
                 <div class="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-slate-200">
@@ -113,7 +112,7 @@
         </main>
     </div>
 
-    <!-- Modals -->
+    <!-- Modals (Tidak berubah) -->
     <div id="po-modal" class="modal-backdrop"><div class="bg-white rounded-xl shadow-2xl w-full max-w-lg m-4"><form id="po-form" class="p-8"><h3 class="text-2xl font-bold mb-6 text-slate-800">新規発注書を追加</h3><div class="space-y-4"><div><label for="po-number" class="block text-sm font-medium text-slate-600 mb-1">PO番号</label><input type="text" id="po-number" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required></div><div><label for="po-customer" class="block text-sm font-medium text-slate-600 mb-1">顧客名</label><input type="text" id="po-customer" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required></div></div><div class="mt-8 flex justify-end gap-3"><button type="button" class="cancel-btn bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200">キャンセル</button><button type="submit" class="bg-primary text-white font-semibold px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors duration-200">保存</button></div></form></div></div>
     <div id="inventory-modal" class="modal-backdrop"><div class="bg-white rounded-xl shadow-2xl w-full max-w-lg m-4"><form id="inventory-form" class="p-8"><h3 class="text-2xl font-bold mb-6 text-slate-800">在庫品目を追加/編集</h3><input type="hidden" id="inventory-id"><div class="space-y-4"><div><label for="inventory-name" class="block text-sm font-medium text-slate-600 mb-1">品目名</label><input type="text" id="inventory-name" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required></div><div><label for="inventory-sku" class="block text-sm font-medium text-slate-600 mb-1">SKU</label><input type="text" id="inventory-sku" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required></div><div><label for="inventory-type" class="block text-sm font-medium text-slate-600 mb-1">タイプ</label><select id="inventory-type" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white"><option value="原材料">原材料</option><option value="完成品">完成品</option></select></div><div><label for="inventory-quantity" class="block text-sm font-medium text-slate-600 mb-1">数量</label><input type="number" id="inventory-quantity" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required min="0"></div></div><div class="mt-8 flex justify-end gap-3"><button type="button" class="cancel-btn bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200">キャンセル</button><button type="submit" class="bg-secondary text-white font-semibold px-4 py-2 rounded-lg hover:bg-emerald-600 transition-colors duration-200">保存</button></div></form></div></div>
     <div id="qr-modal" class="modal-backdrop"><div class="bg-white rounded-xl shadow-2xl w-full max-w-sm m-4 p-8 text-center"><h3 class="text-2xl font-bold mb-2 text-slate-800">作業指示書 作成完了!</h3><p class="text-slate-600 mb-4">このQRコードを工程管理に使用します。</p><p id="qr-wo-number" class="font-mono text-lg mb-4 bg-slate-100 p-2 rounded-md"></p><div id="qrcode-container" class="flex justify-center my-4 p-4 bg-white rounded-lg border"></div><button class="cancel-btn mt-4 bg-primary text-white font-semibold px-6 py-2 rounded-lg hover:bg-primary-hover w-full transition-colors duration-200">閉じる</button></div></div>
