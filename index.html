@@ -3,27 +3,28 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>生産ダッシュボード</title>
+  <title>生産ミニERP</title>
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
   <nav class="nav">
     <div class="nav-left">
-      <img src="assets/logo.png" class="logo" alt="Logo">
+      <img src="assets/logo.png" class="logo" alt="">
       <span class="brand">生産ミニERP</span>
     </div>
     <div class="nav-right">
       <button id="btnToDash" class="btn ghost hidden">ダッシュボード</button>
       <button id="btnToPlan" class="btn ghost hidden">生産計画</button>
       <button id="btnToShip" class="btn ghost hidden">出荷予定</button>
-      <button id="btnScan" class="btn ghost hidden">スキャン更新</button>
+      <button id="btnShowStationQR" class="btn ghost hidden">工程QR</button>
       <span id="userInfo" class="muted"></span>
       <button id="btnAddUserWeb" class="btn ghost hidden">ユーザー追加</button>
-      <button id="btnChangePass" class="btn ghost hidden">パスワード変更</button>
+      <button id="btnChangePass" class="btn ghost hidden">パス変更</button>
       <button id="btnLogout" class="btn ghost hidden">ログアウト</button>
     </div>
   </nav>
@@ -43,6 +44,7 @@
           <input id="nuPass" type="password" placeholder="パスワード">
           <input id="nuName" placeholder="氏名">
           <select id="nuDept">
+            <option value="生産技術">生産技術</option>
             <option value="生産管理部">生産管理部</option>
             <option value="製造部">製造部</option>
             <option value="検査部">検査部</option>
@@ -54,15 +56,13 @@
           </select>
         </div>
         <button id="btnNewUser" class="btn ghost full">ユーザー追加</button>
-        <p class="muted s">初回は <code>admin/admin123</code>（Users シートが空の場合に自動作成）。</p>
+        <p class="muted s">初回: <code>admin / admin123</code>（Users空なら自動作成。部門=生産技術）</p>
       </details>
-      <div class="row gap" style="margin-top:.8rem">
-        <button id="btnLogin" class="btn primary grow">ログイン</button>
-      </div>
+      <button id="btnLogin" class="btn primary full" style="margin-top:.8rem">ログイン</button>
     </section>
   </main>
 
-  <!-- ページ：ダッシュボード -->
+  <!-- ダッシュボード -->
   <main id="pageDash" class="container hidden">
     <section class="card">
       <header class="row-between">
@@ -76,7 +76,7 @@
         <div class="stat">
           <div class="muted s">完成品在庫</div>
           <div id="statFinished" class="stat-num">-</div>
-          <div class="muted s"><span id="statReady">-</span> 準備 • <span id="statShipped">-</span> 出荷済</div>
+          <div class="muted s"><span id="statReady">-</span> 準備 / <span id="statShipped">-</span> 出荷済</div>
         </div>
         <div class="tile">
           <div class="muted s">本日の出荷予定</div>
@@ -91,10 +91,8 @@
 
     <section class="card">
       <h3>チャート</h3>
-      <canvas id="chartMonthly" height="160"></canvas>
-      <hr>
-      <canvas id="chartCustomer" height="160"></canvas>
-      <hr>
+      <canvas id="chartMonthly" height="160"></canvas><hr>
+      <canvas id="chartCustomer" height="160"></canvas><hr>
       <canvas id="chartStock" height="160"></canvas>
     </section>
 
@@ -121,11 +119,21 @@
     </section>
   </main>
 
-  <!-- ページ：生産計画 -->
+  <!-- 生産計画 -->
   <main id="pagePlan" class="container hidden">
     <section class="card">
-      <h3>生産計画（生産現品票 発行）</h3>
+      <header class="row-between">
+        <h3>生産計画（生産現品票）</h3>
+        <div class="row gap">
+          <button class="btn ghost" onclick="window.print()">印刷</button>
+          <button class="btn ghost" id="btnPlanExport">エクスポート</button>
+          <button class="btn ghost" id="btnPlanEdit">編集</button>
+          <button class="btn primary" id="btnCreateOrder">保存（新規/編集保存）</button>
+          <button class="btn" id="btnPlanDelete">削除</button>
+        </div>
+      </header>
       <div class="grid">
+        <input id="c_po" placeholder="PO（編集用）">
         <input id="c_tsuchi" placeholder="通知書番号">
         <input id="c_tokui" placeholder="得意先" list="dl_tokui">
         <input id="c_tokui_hin" placeholder="得意先品番">
@@ -139,48 +147,50 @@
       <datalist id="dl_hinmei"></datalist>
       <datalist id="dl_hinban"></datalist>
       <datalist id="dl_zuban"></datalist>
-      <button id="btnCreateOrder" class="btn primary full">生産現品票 発行</button>
     </section>
   </main>
 
-  <!-- ページ：出荷予定 -->
+  <!-- 出荷予定 -->
   <main id="pageShip" class="container hidden">
     <section class="card">
-      <h3>出荷予定の作成</h3>
+      <header class="row-between">
+        <h3>出荷予定</h3>
+        <div class="row gap">
+          <button class="btn ghost" onclick="window.print()">印刷</button>
+          <button class="btn ghost" id="btnShipExport">エクスポート</button>
+          <button class="btn ghost" id="btnShipEdit">編集</button>
+          <button class="btn primary" id="btnSchedule">保存（新規/編集保存）</button>
+          <button class="btn" id="btnShipDelete">削除</button>
+        </div>
+      </header>
       <div class="grid">
         <input id="s_po" placeholder="PO ID">
         <input id="s_date" type="date">
         <input id="s_qty" type="number" min="0" placeholder="数量">
+        <input id="s_shipid" placeholder="Ship ID（編集/削除用）">
       </div>
       <div class="row gap">
-        <button id="btnSchedule" class="btn primary grow">登録</button>
         <button id="btnShipByPO" class="btn ghost grow">出荷確認書（PO）</button>
         <button id="btnShipByID" class="btn ghost grow">出荷確認書（Ship ID）</button>
       </div>
     </section>
   </main>
 
-  <!-- モーダル：QRスキャン -->
+  <!-- モーダル：工程QR -->
+  <dialog id="dlgStationQR" class="paper">
+    <div class="body">
+      <h3>工程QR（現場掲示用）</h3>
+      <p class="muted s">フォーマット: <code>ST:工程名</code> 例) ST:組立工程 / ST:検査工程 / ST:出荷工程</p>
+      <div id="qrWrap" class="grid"></div>
+    </div>
+    <footer class="row-end"><button class="btn" onclick="document.getElementById('dlgStationQR').close()">閉じる</button></footer>
+  </dialog>
+
+  <!-- モーダル：スキャン（更新時に起動） -->
   <dialog id="dlgScan" class="paper">
     <div class="body">
-      <h3>QRスキャンでステータス更新</h3>
-      <div class="grid">
-        <select id="scanStatus">
-          <option>生産開始</option>
-          <option>検査保留</option>
-          <option>検査済</option>
-          <option>出荷準備</option>
-          <option>出荷済</option>
-          <option>不良品（要リペア）</option>
-        </select>
-        <select id="scanProcess">
-          <option>レーザ加工</option><option>曲げ加工</option><option>外枠組立</option>
-          <option>シャッター組立</option><option>シャッター溶接</option><option>コーキング</option>
-          <option>外枠塗装</option><option>組立（組立中）</option><option>組立（組立済）</option>
-          <option>外注</option><option>検査工程</option>
-        </select>
-      </div>
-      <p class="muted s">QRの内容：<code>PO-xxxxxxxxxxxx</code>（PO ID）</p>
+      <h3>QRスキャン更新（PO: <span id="scanPO"></span>）</h3>
+      <p class="muted s">工程QRを読み取ると、工程/状態が自動切替され、履歴に記録されます。</p>
       <video id="scanVideo" playsinline></video>
       <canvas id="scanCanvas" class="hidden"></canvas>
       <div id="scanResult" class="muted s" style="margin-top:.5rem"></div>
@@ -191,7 +201,13 @@
     </footer>
   </dialog>
 
-  <!-- モーダル：票 -->
+  <!-- モーダル：履歴 -->
+  <dialog id="dlgHistory" class="paper">
+    <div class="body"><h3>更新履歴</h3><div id="histBody"></div></div>
+    <footer class="row-end"><button class="btn" onclick="document.getElementById('dlgHistory').close()">閉じる</button></footer>
+  </dialog>
+
+  <!-- 汎用票 -->
   <dialog id="dlgTicket" class="paper"><div class="body"></div><footer class="row-end"><button class="btn ghost" onclick="window.print()">印刷</button><button class="btn" onclick="document.getElementById('dlgTicket').close()">閉じる</button></footer></dialog>
   <dialog id="dlgShip" class="paper"><div class="body"></div><footer class="row-end"><button class="btn ghost" onclick="window.print()">印刷</button><button class="btn" onclick="document.getElementById('dlgShip').close()">閉じる</button></footer></dialog>
 </body>
