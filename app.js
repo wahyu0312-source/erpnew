@@ -1,6 +1,7 @@
 /* ================= CONFIG ================= */
+// Ganti dengan URL Web App /exec hasil Deploy
 const API_BASE = "https://script.google.com/macros/s/AKfycbxabdBKOO28iUW8Ho-kiVFCU6lXtjwzeV1GLO4SQLzVwpxOGoMGllRd0UIrxdD0LHpqUA/exec"; // contoh: https://script.google.com/macros/s/AKfycb.../exec
-const API_KEY  = ""; // isi jika Code.gs CONF.API_TOKEN diisi
+const API_KEY  = ""; // opsional: kalau CONF.API_TOKEN di Code.gs diisi, taruh lagi di sini
 
 const PROCESSES = [
   'レーザ工程','曲げ工程','外枠組立工程','シャッター組立工程','シャッター溶接工程',
@@ -11,21 +12,29 @@ const STATUSES = ['生産開始','検査保留','検査済','出荷準備','出�
 const $ = sel => document.querySelector(sel);
 const fmtDT = s => s ? new Date(s).toLocaleString() : '';
 
-let SESSION = null; // {username, full_name, department, role}
+let SESSION = null;
 
-/* ================= API WRAPPER ================= */
+/* ================= API WRAPPER (tanpa preflight) ================= */
+async function apiPost(action, body){
+  const payload = { action, ...body };
+  if (API_KEY) payload.apiKey = API_KEY;
+  const res = await fetch(API_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // penting agar tanpa preflight
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error('Network error: ' + res.status);
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error);
+  return j.data;
+}
 async function apiGet(params){
   const url = API_BASE + "?" + new URLSearchParams(params).toString();
-  const res = await fetch(url, { method:'GET', headers:{ 'X-API-KEY':API_KEY }});
-  const j = await res.json(); if (!j.ok) throw new Error(j.error); return j.data;
-}
-async function apiPost(action, body){
-  const res = await fetch(API_BASE, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json', 'X-API-KEY':API_KEY },
-    body: JSON.stringify({ action, ...body })
-  });
-  const j = await res.json(); if (!j.ok) throw new Error(j.error); return j.data;
+  const res = await fetch(url); // tanpa header custom
+  if (!res.ok) throw new Error('Network error: ' + res.status);
+  const j = await res.json();
+  if (!j.ok) throw new Error(j.error);
+  return j.data;
 }
 
 /* ================= AUTH ================= */
@@ -33,6 +42,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
   $('#btnLogin').onclick = onLogin;
   $('#btnNewUser').onclick = addUserUI;
   $('#btnLogout').onclick = ()=>{ SESSION=null; localStorage.removeItem('erp_session'); location.reload(); };
+  $('#btnChangePass').onclick = changePasswordUI;
 
   $('#btnRefresh').onclick = refreshAll;
   $('#btnCreateOrder').onclick = createOrderUI;
@@ -72,18 +82,31 @@ async function addUserUI(){
   try{
     await apiPost('createUser', { user: SESSION, payload });
     alert('User ditambahkan');
-  }catch(e){ alert(e.message || e); }
+  }catch(e){ alert(e.message||e); }
+}
+
+async function changePasswordUI(){
+  if (!SESSION) return alert('Login dulu');
+  const oldPass = prompt('Password lama:'); if (oldPass===null) return;
+  const newPass = prompt('Password baru:'); if (newPass===null) return;
+  try{
+    await apiPost('changePassword', { user:SESSION, oldPass, newPass });
+    alert('Password diganti. Silakan login ulang.');
+    SESSION=null; localStorage.removeItem('erp_session'); location.reload();
+  }catch(e){ alert(e.message||e); }
 }
 
 function enterApp(){
   $('#userInfo').textContent = `${SESSION.full_name} • ${SESSION.department}`;
   $('#btnLogout').classList.remove('hidden');
+  $('#btnChangePass').classList.remove('hidden');
   $('#authView').classList.add('hidden');
   $('#appView').classList.remove('hidden');
   loadMasters(); refreshAll();
 }
 function showAuth(){
   $('#btnLogout').classList.add('hidden');
+  $('#btnChangePass').classList.add('hidden');
   $('#authView').classList.remove('hidden');
   $('#appView').classList.add('hidden');
 }
@@ -121,7 +144,6 @@ async function listOrders(){
   const rows = await apiGet({ action:'listOrders', q });
   return rows;
 }
-
 async function renderOrders(){
   const rows = await listOrders();
   $('#tbOrders').innerHTML = rows.map(r=>`
@@ -143,7 +165,6 @@ async function renderOrders(){
       </td>
     </tr>`).join('');
 }
-
 async function promptUpdate(po_id, curStatus, curProc){
   const status = prompt('Status baru (生産開始/検査保留/検査済/出荷準備/出荷済/不良品（要リペア）):', curStatus||'');
   if (status===null) return;
@@ -275,26 +296,4 @@ function showShipDoc(s,o){
     </div>
   </div>`;
   $('#shipBody').innerHTML = body; $('#dlgShip').showModal();
-}
-async function openShipByID(id){ const d=await apiGet({action:'shipById', ship_id:id}); showShipDoc(d.shipment,d.order); }
-
-/* ================= EXPORT ================= */
-async function exportOrdersCSV(){
-  const rows = await apiGet({ action:'listOrders' });
-  downloadCSV('orders.csv', rows||[]);
-}
-async function exportShipCSV(){
-  const rows = await apiGet({ action:'todayShip' }); // contoh export hari ini; bisa ganti ke list semua shipments via endpoint terpisah
-  downloadCSV('shipments_today.csv', rows||[]);
-}
-function downloadCSV(name, rows){
-  if(!rows.length) return downloadFile(name,'');
-  const headers=Object.keys(rows[0]);
-  const csv=[headers.join(',')].concat(rows.map(r=> headers.map(h=> String(r[h]??'').replaceAll('"','""')).map(v=>`"${v}"`).join(','))).join('\n');
-  downloadFile(name,csv);
-}
-function downloadFile(name, content){
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([content],{type:'text/csv'}));
-  a.download=name; a.click();
 }
