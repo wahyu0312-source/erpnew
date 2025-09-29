@@ -7,8 +7,8 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <!-- Supabase JS v2 -->
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -19,27 +19,49 @@
     </div>
     <div class="nav-right">
       <span id="userInfo" class="muted"></span>
-      <button id="btnLogout" class="btn ghost">Logout</button>
+      <button id="btnLogout" class="btn ghost hidden">Logout</button>
     </div>
   </nav>
 
-  <!-- AUTH -->
+  <!-- LOGIN -->
   <main id="authView" class="container">
     <section class="card card-tight">
-      <h2>Masuk</h2>
+      <h2>Login</h2>
       <div class="grid">
-        <label>Email
-          <input id="inEmail" type="email" autocomplete="email">
+        <label>Username
+          <input id="inUser" placeholder="mis. pm1">
         </label>
         <label>Password
-          <input id="inPass" type="password" autocomplete="current-password">
+          <input id="inPass" type="password" placeholder="••••••••">
         </label>
       </div>
-      <div class="row gap">
+
+      <details class="card" style="margin-top:.8rem">
+        <summary><strong>Buat User Baru (Admin)</strong></summary>
+        <div class="grid" style="margin-top:.6rem">
+          <input id="nuUser" placeholder="username baru">
+          <input id="nuPass" type="password" placeholder="password">
+          <input id="nuName" placeholder="Full Name">
+          <select id="nuDept">
+            <option value="生産管理">生産管理</option>
+            <option value="製造部">製造部</option>
+            <option value="検査部">検査部</option>
+          </select>
+          <select id="nuRole">
+            <option value="manager">manager</option>
+            <option value="member" selected>member</option>
+            <option value="admin">admin</option>
+          </select>
+        </div>
+        <button id="btnNewUser" class="btn ghost full">Tambah User</button>
+        <p class="muted s">Hanya bisa dipakai setelah **login sebagai admin**.<br>
+        Kalau tabel user kosong, login pertama pakai credential dari kode: <code>admin / admin123</code> (bisa diganti di <code>app.js</code>), dan akun admin akan dibuat otomatis.</p>
+      </details>
+
+      <div class="row gap" style="margin-top:.8rem">
         <button id="btnLogin" class="btn primary grow">Login</button>
-        <button id="btnSignup" class="btn ghost grow">Sign Up</button>
+        <button id="btnFirstHelp" class="btn ghost grow">Petunjuk Awal</button>
       </div>
-      <p class="muted s">Setelah Sign Up, isi profile di tabel <code>profiles</code> (full_name, department) lewat Supabase.</p>
     </section>
   </main>
 
