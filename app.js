@@ -1,192 +1,129 @@
-/* ================= CONFIG ================= */
-// Ganti ini dengan URL Web App /exec hasil Deploy di Apps Script
-const API_BASE = "https://script.google.com/macros/s/AKfycbzjiN5ePhvRAs6fTKEraiEXXOFP-OndOFgw1VuAH2i5SX2-z3CGYHXr3_m8SHG01gFyFA/exec"; // contoh: https://script.google.com/macros/s/AKfycb.../exec
-const API_KEY  = ""; // opsional: isi jika Code.gs CONF.API_TOKEN diisi
+/* ============ 設定 ============ */
+// Web App /exec のURL
+const API_BASE = "https://script.google.com/macros/s/AKfycbzjiN5ePhvRAs6fTKEraiEXXOFP-OndOFgw1VuAH2i5SX2-z3CGYHXr3_m8SHG01gFyFA/exec";
+const API_KEY  = ""; // 使わないなら空
 
-// Daftar proses & status referensi (untuk tampilan dan validasi ringan)
-const PROCESSES = [
-  'レーザ工程','曲げ工程','外枠組立工程','シャッター組立工程','シャッター溶接工程',
-  'コーキング工程','外枠塗装工程','組立工程（組立中）','組立工程（組立済）','外注','検査工程'
-];
-const STATUSES = ['生産開始','検査保留','検査済','出荷準備','出荷済','不良品（要リペア）'];
+// 日本語工程・状態
+const PROCESSES = ['レーザ加工','曲げ加工','外枠組立','シャッター組立','シャッター溶接','コーキング','外枠塗装','組立（組立中）','組立（組立済）','外注','検査工程'];
+const STATUSES  = ['生産開始','検査保留','検査済','出荷準備','出荷済','不良品（要リペア）'];
 
-/* ================= UTIL ================= */
-const $ = sel => document.querySelector(sel);
-const fmtDT = s => s ? new Date(s).toLocaleString() : '';
-const fmtD = s => s ? new Date(s).toLocaleDateString() : '';
+const $ = s=>document.querySelector(s);
+const fmtDT = s=> s? new Date(s).toLocaleString(): '';
+const fmtD  = s=> s? new Date(s).toLocaleDateString(): '';
+let SESSION=null;
 
-let SESSION = null; // {username, full_name, department, role}
-
-/* ================= API WRAPPER (tanpa preflight) ================= */
+/* ============ API (no preflight) ============ */
 async function apiPost(action, body){
   const payload = { action, ...body };
-  if (API_KEY) payload.apiKey = API_KEY; // jika kamu aktifkan token di server
-  const res = await fetch(API_BASE, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // penting agar tidak memicu preflight
-    body: JSON.stringify(payload)
-  });
-  if (!res.ok) throw new Error('Network error: ' + res.status);
-  const j = await res.json();
-  if (!j.ok) throw new Error(j.error);
-  return j.data;
+  if (API_KEY) payload.apiKey = API_KEY;
+  const res = await fetch(API_BASE, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload) });
+  if (!res.ok) throw new Error('Network '+res.status);
+  const j=await res.json(); if(!j.ok) throw new Error(j.error); return j.data;
 }
 async function apiGet(params){
-  const url = API_BASE + "?" + new URLSearchParams(params).toString();
-  const res = await fetch(url); // tanpa header custom
-  if (!res.ok) throw new Error('Network error: ' + res.status);
-  const j = await res.json();
-  if (!j.ok) throw new Error(j.error);
-  return j.data;
+  const url = API_BASE + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url); if(!res.ok) throw new Error('Network '+res.status);
+  const j=await res.json(); if(!j.ok) throw new Error(j.error); return j.data;
 }
 
-/* ================= BOOT ================= */
+/* ============ Boot ============ */
 window.addEventListener('DOMContentLoaded', ()=>{
-  // Hook elemen standar yang sudah ada di index.html
-  bindLoginSection();
-  bindAppSection();
+  // nav routing
+  $('#btnToDash').onclick = ()=>showPage('pageDash');
+  $('#btnToPlan').onclick = ()=>showPage('pagePlan');
+  $('#btnToShip').onclick = ()=>showPage('pageShip');
 
-  // Restore sesi
+  // login area
+  $('#btnLogin').onclick = onLogin;
+  $('#btnNewUser').onclick = addUserFromLoginUI;
+  $('#btnLogout').onclick = ()=>{ SESSION=null; localStorage.removeItem('erp_session'); location.reload(); };
+  $('#btnChangePass').onclick = changePasswordUI;
+
+  // feature buttons
+  $('#btnRefresh').onclick = refreshAll;
+  $('#btnCreateOrder').onclick = createOrderUI;
+  $('#btnSchedule').onclick = scheduleUI;
+  $('#btnExportOrders').onclick = exportOrdersCSV;
+  $('#btnExportShip').onclick = exportShipCSV;
+  $('#btnShipByPO').onclick = ()=>{ const po=$('#s_po').value.trim(); if(!po) return alert('POを入力'); openShipByPO(po); };
+  $('#btnShipByID').onclick = ()=>{ const id=prompt('Ship ID:'); if(!id) return; openShipByID(id.trim()); };
+  $('#searchQ').addEventListener('input', renderOrders);
+
+  // QR scan modal
+  $('#btnScan').onclick = openScanModal;
+  $('#btnScanStart').onclick = scanStart;
+  $('#btnScanClose').onclick = scanClose;
+
+  // add user from navbar (only 生産管理部/admin)
+  $('#btnAddUserWeb').onclick = openAddUserModal;
+
   const saved = localStorage.getItem('erp_session');
-  if (saved){ SESSION=JSON.parse(saved); enterApp(); } else { showAuth(); }
-
-  // Sisipkan UI “Tambah User via Web” (navbar + modal) kalau belum ada
-  ensureAddUserUI();
+  if (saved){ SESSION=JSON.parse(saved); enterApp(); } else { showPage('authView'); }
 });
 
-/* ================= AUTH ================= */
-function bindLoginSection(){
-  const btnLogin = $('#btnLogin');
-  const btnNewUser = $('#btnNewUser');
-  const btnLogout = $('#btnLogout');
-  const btnChangePass = $('#btnChangePass');
-
-  if (btnLogin) btnLogin.onclick = onLogin;
-  if (btnNewUser) btnNewUser.onclick = addUserFromLoginUI;
-  if (btnLogout) btnLogout.onclick = ()=>{ SESSION=null; localStorage.removeItem('erp_session'); location.reload(); };
-  if (btnChangePass) btnChangePass.onclick = changePasswordUI;
-}
-
-function bindAppSection(){
-  const btnRefresh = $('#btnRefresh');
-  const btnCreateOrder = $('#btnCreateOrder');
-  const btnSchedule = $('#btnSchedule');
-  const btnExportOrders = $('#btnExportOrders');
-  const btnExportShip = $('#btnExportShip');
-  const btnShipByPO = $('#btnShipByPO');
-  const btnShipByID = $('#btnShipByID');
-  const searchQ = $('#searchQ');
-
-  if (btnRefresh) btnRefresh.onclick = refreshAll;
-  if (btnCreateOrder) btnCreateOrder.onclick = createOrderUI;
-  if (btnSchedule) btnSchedule.onclick = scheduleUI;
-  if (btnExportOrders) btnExportOrders.onclick = exportOrdersCSV;
-  if (btnExportShip) btnExportShip.onclick = exportShipCSV;
-  if (btnShipByPO) btnShipByPO.onclick = ()=>{ const po=$('#s_po').value.trim(); if(!po) return alert('Isi PO'); openShipByPO(po); };
-  if (btnShipByID) btnShipByID.onclick = ()=>{ const id=prompt('Ship ID:'); if(!id) return; openShipByID(id.trim()); };
-  if (searchQ) searchQ.addEventListener('input', renderOrders);
-}
-
+/* ============ Auth ============ */
 async function onLogin(){
-  const username = $('#inUser').value.trim();
-  const password = $('#inPass').value.trim();
+  const username=$('#inUser').value.trim();
+  const password=$('#inPass').value.trim();
   try{
-    const user = await apiPost('login', { username, password });
-    SESSION = user;
-    localStorage.setItem('erp_session', JSON.stringify(SESSION));
+    const user=await apiPost('login',{username,password});
+    SESSION=user; localStorage.setItem('erp_session', JSON.stringify(SESSION));
     enterApp();
-  }catch(e){ alert(e.message || e); }
+  }catch(e){ alert(e.message||e); }
 }
-
-// “Tambah user” di panel login (detail-section)
 async function addUserFromLoginUI(){
-  if (!SESSION) return alert('Login dulu');
-  if (!(SESSION.role==='admin' || SESSION.department==='生産管理')) return alert('Hanya admin/生産管理');
-
-  const payload = {
-    username: $('#nuUser').value.trim(),
-    password: $('#nuPass').value.trim(),
-    full_name: $('#nuName').value.trim(),
-    department: $('#nuDept').value,
-    role: $('#nuRole').value
-  };
-  if (!payload.username || !payload.password || !payload.full_name) return alert('Lengkapi data user');
-  try{
-    await apiPost('createUser', { user: SESSION, payload });
-    alert('User ditambahkan');
-  }catch(e){ alert(e.message||e); }
+  if (!SESSION) return alert('ログインしてください');
+  if (!(SESSION.role==='admin'||SESSION.department==='生産管理部')) return alert('権限不足');
+  const payload={ username:$('#nuUser').value.trim(), password:$('#nuPass').value.trim(), full_name:$('#nuName').value.trim(), department:$('#nuDept').value, role:$('#nuRole').value };
+  if (!payload.username||!payload.password||!payload.full_name) return alert('必須項目を入力');
+  try{ await apiPost('createUser',{user:SESSION,payload}); alert('作成しました'); }catch(e){ alert(e.message||e); }
 }
-
 async function changePasswordUI(){
-  if (!SESSION) return alert('Login dulu');
-  const oldPass = prompt('Password lama:'); if (oldPass===null) return;
-  const newPass = prompt('Password baru:'); if (newPass===null) return;
-  try{
-    await apiPost('changePassword', { user:SESSION, oldPass, newPass });
-    alert('Password diganti. Silakan login ulang.');
-    SESSION=null; localStorage.removeItem('erp_session'); location.reload();
-  }catch(e){ alert(e.message||e); }
+  if (!SESSION) return alert('ログインしてください');
+  const oldPass = prompt('旧パスワード:'); if(oldPass===null) return;
+  const newPass = prompt('新パスワード:'); if(newPass===null) return;
+  try{ await apiPost('changePassword',{user:SESSION,oldPass,newPass}); alert('変更しました。再ログインしてください。'); SESSION=null; localStorage.removeItem('erp_session'); location.reload(); }catch(e){ alert(e.message||e); }
 }
 
 function enterApp(){
-  // Navbar info + tombol
-  const userInfo = $('#userInfo');
-  const btnLogout = $('#btnLogout');
-  const btnChangePass = $('#btnChangePass');
-  if (userInfo) userInfo.textContent = `${SESSION.full_name} • ${SESSION.department}`;
-  if (btnLogout) btnLogout.classList.remove('hidden');
-  if (btnChangePass) btnChangePass.classList.remove('hidden');
+  // navbar controls
+  $('#userInfo').textContent = `${SESSION.full_name}・${SESSION.department}`;
+  ['btnLogout','btnChangePass','btnToDash','btnToPlan','btnToShip','btnScan'].forEach(id=>$('#'+id).classList.remove('hidden'));
+  if (SESSION.role==='admin' || SESSION.department==='生産管理部'){ $('#btnAddUserWeb').classList.remove('hidden'); }
+  else { $('#btnAddUserWeb').classList.add('hidden'); }
 
-  // Switch view
-  $('#authView')?.classList.add('hidden');
-  $('#appView')?.classList.remove('hidden');
-
+  showPage('pageDash');
   loadMasters();
   refreshAll();
 }
 
-function showAuth(){
-  $('#btnLogout')?.classList.add('hidden');
-  $('#btnChangePass')?.classList.add('hidden');
-  $('#authView')?.classList.remove('hidden');
-  $('#appView')?.classList.add('hidden');
+function showPage(id){
+  ['authView','pageDash','pagePlan','pageShip'].forEach(pid=> document.getElementById(pid)?.classList.add('hidden'));
+  document.getElementById(id)?.classList.remove('hidden');
 }
 
-/* ================= MASTERS ================= */
+/* ============ Masters ============ */
 async function loadMasters(){
   try{
-    const opts = await apiGet({ action:'masters', types:'得意先,品名,品番,図番' });
-    const fill = (id, arr)=>{ $(id).innerHTML = (arr||[]).map(v=> `<option value="${v}"></option>`).join(''); };
-    fill('#dl_tokui', opts['得意先']); fill('#dl_hinmei', opts['品名']);
-    fill('#dl_hinban', opts['品番']); fill('#dl_zuban', opts['図番']);
-  }catch(e){ console.warn('masters', e); }
+    const opts = await apiGet({action:'masters',types:'得意先,品名,品番,図番'});
+    const fill = (id,arr)=>{ $(id).innerHTML=(arr||[]).map(v=>`<option value="${v}"></option>`).join(''); };
+    fill('#dl_tokui',opts['得意先']); fill('#dl_hinmei',opts['品名']); fill('#dl_hinban',opts['品番']); fill('#dl_zuban',opts['図番']);
+  }catch(e){ console.warn(e); }
 }
 
-/* ================= ORDERS ================= */
+/* ============ Orders ============ */
 async function createOrderUI(){
-  const payload = {
-    '通知書番号': $('#c_tsuchi').value.trim(),
-    '得意先': $('#c_tokui').value.trim(),
-    '得意先品番': $('#c_tokui_hin').value.trim(),
-    '製番号': $('#c_sei').value.trim(),
-    '品名': $('#c_hinmei').value.trim(),
-    '品番': $('#c_hinban').value.trim(),
-    '図番': $('#c_zuban').value.trim(),
-    '管理No': $('#c_kanri').value.trim()
+  if (!(SESSION.role==='admin'||SESSION.department==='生産管理部')) return alert('権限不足（生産管理部）');
+  const payload={
+    '通知書番号':$('#c_tsuchi').value.trim(),'得意先':$('#c_tokui').value.trim(),'得意先品番':$('#c_tokui_hin').value.trim(),
+    '製番号':$('#c_sei').value.trim(),'品名':$('#c_hinmei').value.trim(),'品番':$('#c_hinban').value.trim(),'図番':$('#c_zuban').value.trim(),
+    '管理No':$('#c_kanri').value.trim()
   };
-  try{
-    const r = await apiPost('createOrder', { payload, user:SESSION });
-    alert('Order dibuat: '+r.po_id);
-    refreshAll();
-  }catch(e){ alert(e.message||e); }
+  try{ const r=await apiPost('createOrder',{payload,user:SESSION}); alert('発行しました: '+r.po_id); refreshAll(); }catch(e){ alert(e.message||e); }
 }
-
-async function listOrders(){
-  const q = $('#searchQ')?.value.trim() || '';
-  return apiGet({ action:'listOrders', q });
-}
+async function listOrders(){ const q=$('#searchQ').value.trim(); return apiGet({action:'listOrders',q}); }
 async function renderOrders(){
-  const rows = await listOrders();
+  const rows=await listOrders();
   $('#tbOrders').innerHTML = rows.map(r=>`
     <tr>
       <td><b>${r.po_id}</b></td>
@@ -201,265 +138,164 @@ async function renderOrders(){
       <td class="muted s">${r.updated_by||''}</td>
       <td>
         <button class="btn ghost s" onclick="openTicket('${r.po_id}')">現品票</button>
-        <button class="btn ghost s" onclick="promptUpdate('${r.po_id}','${r.status}','${r.current_process}')">Update</button>
+        <button class="btn ghost s" onclick="promptUpdate('${r.po_id}','${r.status}','${r.current_process}')">更新</button>
         <button class="btn ghost s" onclick="openShipByPO('${r.po_id}')">出荷確認</button>
       </td>
     </tr>`).join('');
 }
-
 async function promptUpdate(po_id, curStatus, curProc){
-  const status = prompt('Status baru (生産開始/検査保留/検査済/出荷準備/出荷済/不良品（要リペア）):', curStatus||'');
+  const status = prompt('新しい状態（生産開始/検査保留/検査済/出荷準備/出荷済/不良品（要リペア））:', curStatus||'');
   if (status===null) return;
-  const proc = prompt('Proses baru:', curProc||''); if (proc===null) return;
-  const note = prompt('Catatan (opsional):','')||'';
+  const proc = prompt('新しい工程:', curProc||''); if (proc===null) return;
+  const note = prompt('備考（任意）:','')||'';
   try{
-    await apiPost('updateOrder', { po_id, updates:{ status, current_process:proc, note }, user:SESSION });
-    alert('Updated');
-    refreshAll(true);
+    await apiPost('updateOrder',{po_id,updates:{status:status,current_process:proc,note},user:SESSION});
+    alert('更新しました'); refreshAll(true);
   }catch(e){ alert(e.message||e); }
 }
 
-/* ================= SHIPMENTS ================= */
+/* ============ 出荷 ============ */
 async function scheduleUI(){
-  const po_id = $('#s_po').value.trim();
-  const dateIso = $('#s_date').value;
-  const qty = $('#s_qty').value;
-  if (!po_id || !dateIso) return alert('Isi PO & tanggal');
-  try{
-    const r = await apiPost('scheduleShipment', { po_id, dateIso, qty, user:SESSION });
-    alert('Shipment dibuat: '+r.ship_id);
-    refreshAll(true);
-  }catch(e){ alert(e.message||e); }
+  if (!(SESSION.role==='admin'||SESSION.department==='生産管理部')) return alert('権限不足（生産管理部）');
+  const po_id=$('#s_po').value.trim(), dateIso=$('#s_date').value, qty=$('#s_qty').value;
+  if (!po_id||!dateIso) return alert('POと日付を入力');
+  try{ const r=await apiPost('scheduleShipment',{po_id,dateIso,qty,user:SESSION}); alert('登録: '+r.ship_id); refreshAll(true);}catch(e){ alert(e.message||e); }
 }
 async function openShipByPO(po_id){
-  try{
-    const doc = await apiGet({ action:'shipByPo', po_id });
-    showShipDoc(doc.shipment, doc.order);
-  }catch(e){ alert(e.message||e); }
+  try{ const doc=await apiGet({action:'shipByPo',po_id}); showShipDoc(doc.shipment,doc.order); }catch(e){ alert(e.message||e); }
 }
-async function openShipByID(ship_id){
-  try{
-    const doc = await apiGet({ action:'shipById', ship_id });
-    showShipDoc(doc.shipment, doc.order);
-  }catch(e){ alert(e.message||e); }
+async function openShipByID(id){
+  try{ const doc=await apiGet({action:'shipById',ship_id:id}); showShipDoc(doc.shipment,doc.order); }catch(e){ alert(e.message||e); }
 }
 
-/* ================= DASHBOARD & CHARTS ================= */
-async function refreshAll(keepSearch=false){
+/* ============ ダッシュボード ============ */
+async function refreshAll(keep=false){
   try{
-    const s = await apiGet({ action:'stock' });
-    $('#statFinished').textContent = s.finishedStock;
-    $('#statReady').textContent = s.ready;
-    $('#statShipped').textContent = s.shipped;
+    const s=await apiGet({action:'stock'});
+    $('#statFinished').textContent=s.finishedStock; $('#statReady').textContent=s.ready; $('#statShipped').textContent=s.shipped;
 
-    const today = await apiGet({ action:'todayShip' });
-    $('#listToday').innerHTML = today.length
-      ? today.map(r=> `<div><span>${r.po_id}</span><span>${fmtD(r.scheduled_date)} • Qty ${r.qty}</span></div>`).join('')
-      : '<div class="muted">Tidak ada jadwal hari ini</div>';
+    const today=await apiGet({action:'todayShip'});
+    $('#listToday').innerHTML = today.length? today.map(r=>`<div><span>${r.po_id}</span><span>${fmtD(r.scheduled_date)}・${r.qty}</span></div>`).join('') : '<div class="muted">本日予定なし</div>';
 
-    const loc = await apiGet({ action:'locSnapshot' });
+    const loc=await apiGet({action:'locSnapshot'});
     $('#gridProc').innerHTML = PROCESSES.map(p=> `<div class="grid-chip"><div class="muted s">${p}</div><div class="h">${loc[p]||0}</div></div>`).join('');
 
-    if (!keepSearch) $('#searchQ').value='';
-
-    await renderOrders();
-    await renderCharts();
+    if (!keep) $('#searchQ').value='';
+    await renderOrders(); await renderCharts();
   }catch(e){ console.error(e); }
 }
 let chM=null,chC=null,chS=null;
 async function renderCharts(){
-  const d = await apiGet({ action:'charts' });
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  if (chM) chM.destroy();
-  chM = new Chart($('#chartMonthly'), {type:'bar', data:{ labels:months, datasets:[{label:'Total Pengiriman '+d.year, data:d.perMonth}] }});
-  if (chC) chC.destroy();
-  chC = new Chart($('#chartCustomer'), {type:'bar', data:{ labels:Object.keys(d.perCust), datasets:[{label:'Per Customer', data:Object.values(d.perCust)}] }});
-  if (chS) chS.destroy();
-  chS = new Chart($('#chartStock'), {type:'pie', data:{ labels:Object.keys(d.stockBuckets), datasets:[{label:'Stok', data:Object.values(d.stockBuckets)}] }});
+  const d=await apiGet({action:'charts'});
+  const months=['1','2','3','4','5','6','7','8','9','10','11','12'];
+  chM?.destroy(); chM=new Chart($('#chartMonthly'),{type:'bar',data:{labels:months,datasets:[{label:'月別出荷数量（'+d.year+'）',data:d.perMonth}] }});
+  chC?.destroy(); chC=new Chart($('#chartCustomer'),{type:'bar',data:{labels:Object.keys(d.perCust),datasets:[{label:'得意先別出荷',data:Object.values(d.perCust)}]}});
+  chS?.destroy(); chS=new Chart($('#chartStock'),{type:'pie',data:{labels:Object.keys(d.stockBuckets),datasets:[{label:'在庫区分',data:Object.values(d.stockBuckets)}]}});
 }
 
-/* ================= Documents ================= */
+/* ============ 票 ============ */
 async function openTicket(po_id){
   try{
-    const o = await apiGet({ action:'ticket', po_id });
-    const body = `
-    <header>
-      <img src="assets/logo.png" class="logo">
-      <div style="text-align:right">
-        <div style="font-weight:700">シャトルガード・生産現品票</div>
-        <div style="font-size:12px;color:#555">発行: ${new Date().toLocaleString()}</div>
-      </div>
-    </header>
-    <div class="body">
-      <div class="grid" style="grid-template-columns:1fr 1fr">
-        <div><b>管理No</b><div>${o['管理No']||'-'}</div></div>
-        <div><b>通知書番号</b><div>${o['通知書番号']||'-'}</div></div>
-        <div><b>得意先</b><div>${o['得意先']||''}</div></div>
-        <div><b>得意先品番</b><div>${o['得意先品番']||''}</div></div>
-        <div><b>製番号</b><div>${o['製番号']||''}</div></div>
-        <div><b>投入日</b><div>${o['created_at']? new Date(o['created_at']).toLocaleDateString(): '-'}</div></div>
-        <div><b>品名</b><div>${o['品名']||''}</div></div>
-        <div><b>品番/図番</b><div>${(o['品番']||'')+' / '+(o['図番']||'')}</div></div>
-      </div>
-      <hr>
+    const o=await apiGet({action:'ticket',po_id});
+    const body=`
+      <h3>生産現品票</h3>
       <table>
-        <thead><tr><th style="width:18%">工程名</th><th>作業者</th><th>作業日</th><th>投入数</th><th>合格数</th><th>不合格数</th><th>修正数</th></tr></thead>
-        <tbody>${PROCESSES.map(p=> `<tr><td>${p}</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody>
-      </table>
-      <p><b>現在ステータス：</b>${o.status}　<b>工程：</b>${o.current_process}</p>
-      <p style="font-size:12px;color:#555">更新: ${fmtDT(o.updated_at)} / ${o.updated_by||''}</p>
-    </div>`;
-    showDialog('dlgTicket', body, true);
+        <tr><th>管理No</th><td>${o['管理No']||'-'}</td><th>通知書番号</th><td>${o['通知書番号']||'-'}</td></tr>
+        <tr><th>得意先</th><td>${o['得意先']||''}</td><th>得意先品番</th><td>${o['得意先品番']||''}</td></tr>
+        <tr><th>製番号</th><td>${o['製番号']||''}</td><th>投入日</th><td>${o['created_at']?new Date(o['created_at']).toLocaleDateString():'-'}</td></tr>
+        <tr><th>品名</th><td>${o['品名']||''}</td><th>品番/図番</th><td>${(o['品番']||'')+' / '+(o['図番']||'')}</td></tr>
+        <tr><th>工程</th><td colspan="3">${o.current_process}</td></tr>
+        <tr><th>状態</th><td>${o.status}</td><th>更新</th><td>${fmtDT(o.updated_at)} / ${o.updated_by||''}</td></tr>
+      </table>`;
+    showDialog('dlgTicket', body);
   }catch(e){ alert(e.message||e); }
 }
-
 function showShipDoc(s,o){
-  const dt = s.scheduled_date ? new Date(s.scheduled_date) : null;
-  const body = `
-  <header>
-    <img src="assets/logo.png" class="logo">
-    <div style="text-align:right">
-      <div style="font-weight:700">出荷確認書</div>
-      <div style="font-size:12px;color:#555">発行: ${new Date().toLocaleString()}</div>
-    </div>
-  </header>
-  <div class="body">
-    <div class="grid" style="grid-template-columns:1fr 1fr">
-      <div><b>得意先</b><div>${o['得意先']||''}</div></div>
-      <div><b>出荷日</b><div>${dt? dt.toLocaleDateString(): '-'}</div></div>
-      <div><b>品名</b><div>${o['品名']||''}</div></div>
-      <div><b>品番/図番</b><div>${(o['品番']||'')+' / '+(o['図番']||'')}</div></div>
-      <div><b>PO</b><div>${o.po_id||s.po_id}</div></div>
-      <div><b>数量</b><div>${s.qty||0}</div></div>
-      <div><b>出荷ステータス</b><div>${s.status}</div></div>
-      <div><b>備考</b><div style="min-height:32px"></div></div>
-    </div>
-    <hr>
-    <div class="grid" style="grid-template-columns:1fr 1fr 1fr">
-      <div><b>検品者</b><div style="height:40px;border-bottom:1px solid #000"></div></div>
-      <div><b>出荷検査</b><div style="height:40px;border-bottom:1px solid #000"></div></div>
-      <div><b>品質管理</b><div style="height:40px;border-bottom:1px solid #000"></div></div>
-    </div>
-  </div>`;
-  showDialog('dlgShip', body, true);
+  const dt=s.scheduled_date? new Date(s.scheduled_date): null;
+  const body=`
+    <h3>出荷確認書</h3>
+    <table>
+      <tr><th>得意先</th><td>${o['得意先']||''}</td><th>出荷日</th><td>${dt?dt.toLocaleDateString():'-'}</td></tr>
+      <tr><th>品名</th><td>${o['品名']||''}</td><th>品番/図番</th><td>${(o['品番']||'')+' / '+(o['図番']||'')}</td></tr>
+      <tr><th>PO</th><td>${o.po_id||s.po_id}</td><th>数量</th><td>${s.qty||0}</td></tr>
+      <tr><th>出荷ステータス</th><td>${s.status}</td><th>備考</th><td></td></tr>
+    </table>`;
+  showDialog('dlgShip', body);
 }
-async function openShipByID(id){
-  const d=await apiGet({action:'shipById', ship_id:id});
-  showShipDoc(d.shipment,d.order);
+function showDialog(id, html){
+  const dlg=document.getElementById(id); dlg.querySelector('.body').innerHTML=html; dlg.showModal();
 }
 
-/* ================= EXPORT ================= */
-async function exportOrdersCSV(){
-  const rows = await apiGet({ action:'listOrders' });
-  downloadCSV('orders.csv', rows||[]);
-}
-async function exportShipCSV(){
-  const rows = await apiGet({ action:'todayShip' });
-  downloadCSV('shipments_today.csv', rows||[]);
-}
-function downloadCSV(name, rows){
-  if(!rows.length) return downloadFile(name,'');
+/* ============ Export ============ */
+async function exportOrdersCSV(){ const rows=await apiGet({action:'listOrders'}); downloadCSV('orders.csv',rows); }
+async function exportShipCSV(){ const rows=await apiGet({action:'todayShip'}); downloadCSV('ship_today.csv',rows); }
+function downloadCSV(name,rows){
+  if(!rows||!rows.length) return downloadFile(name,'');
   const headers=Object.keys(rows[0]);
   const csv=[headers.join(',')].concat(rows.map(r=> headers.map(h=> String(r[h]??'').replaceAll('"','""')).map(v=>`"${v}"`).join(','))).join('\n');
   downloadFile(name,csv);
 }
-function downloadFile(name, content){
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([content],{type:'text/csv'}));
-  a.download=name; a.click();
+function downloadFile(name,content){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type:'text/csv'})); a.download=name; a.click();
 }
 
-/* ================= GENERIC DIALOG ================= */
-function showDialog(id, innerHTML, printable=false){
-  let dlg = document.getElementById(id);
-  if (!dlg){
-    dlg = document.createElement('dialog');
-    dlg.id = id; dlg.className = 'paper';
-    dlg.innerHTML = `<div class="body"></div><footer class="row-end"></footer>`;
-    document.body.appendChild(dlg);
-  }
-  dlg.querySelector('.body').innerHTML = innerHTML;
-  const footer = dlg.querySelector('footer');
-  footer.innerHTML = '';
-  if (printable){
-    const b1 = document.createElement('button'); b1.className='btn ghost'; b1.textContent='Print'; b1.onclick = ()=>window.print();
-    footer.appendChild(b1);
-  }
-  const b2 = document.createElement('button'); b2.className='btn'; b2.textContent='Tutup'; b2.onclick = ()=>dlg.close();
-  footer.appendChild(b2);
-  dlg.showModal();
-}
-
-/* ================= TAMBAH USER via WEB (NAVBAR) ================= */
-function ensureAddUserUI(){
-  // tampilkan hanya untuk admin/生産管理 ketika sudah login
-  const navRight = document.querySelector('.nav .nav-right') || document.querySelector('.nav');
-  if (!navRight) return;
-
-  // sisipkan tombol bila belum ada
-  let btn = document.getElementById('btnAddUserWeb');
-  if (!btn){
-    btn = document.createElement('button');
-    btn.id = 'btnAddUserWeb';
-    btn.className = 'btn ghost hidden';
-    btn.textContent = 'Tambah User';
-    btn.onclick = openAddUserModal;
-    navRight.insertBefore(btn, document.getElementById('btnChangePass') || null);
-  }
-
-  // saat user berganti (enterApp dipanggil), toggle akan diatur lagi
-  const _origEnter = enterApp;
-  enterApp = function(){
-    _origEnter();
-    const canAdmin = SESSION && (SESSION.role==='admin' || SESSION.department==='生産管理');
-    if (canAdmin) btn.classList.remove('hidden'); else btn.classList.add('hidden');
-  }
-}
-
+/* ============ ユーザー追加（Navbar） ============ */
 function openAddUserModal(){
-  if (!SESSION) return alert('Login dulu');
-  if (!(SESSION.role==='admin' || SESSION.department==='生産管理')) return alert('Hanya admin/生産管理');
-
-  const body = `
-    <h3 style="margin:0 0 8px 0">Tambah User</h3>
+  if (!(SESSION.role==='admin'||SESSION.department==='生産管理部')) return alert('権限不足');
+  const html=`
+    <h3>ユーザー追加</h3>
     <div class="grid">
-      <input id="au_username" placeholder="username">
-      <input id="au_password" type="password" placeholder="password">
-      <input id="au_fullname" placeholder="Nama lengkap">
-      <select id="au_dept">
-        <option value="生産管理">生産管理</option>
-        <option value="製造部">製造部</option>
-        <option value="検査部">検査部</option>
-      </select>
-      <select id="au_role">
-        <option value="member">member</option>
-        <option value="manager">manager</option>
-        <option value="admin">admin</option>
-      </select>
+      <input id="au_username" placeholder="ユーザー名">
+      <input id="au_password" type="password" placeholder="パスワード">
+      <input id="au_fullname" placeholder="氏名">
+      <select id="au_dept"><option>生産管理部</option><option>製造部</option><option>検査部</option></select>
+      <select id="au_role"><option>member</option><option>manager</option><option>admin</option></select>
     </div>
-  `;
-  showDialog('dlgAddUser', body, false);
-
-  // tambahkan tombol Simpan ke footer
-  const dlg = document.getElementById('dlgAddUser');
-  const footer = dlg.querySelector('footer');
-  const saveBtn = document.createElement('button');
-  saveBtn.className = 'btn primary';
-  saveBtn.textContent = 'Simpan';
-  saveBtn.onclick = async ()=>{
-    const payload = {
-      username: $('#au_username').value.trim(),
-      password: $('#au_password').value.trim(),
-      full_name: $('#au_fullname').value.trim(),
-      department: $('#au_dept').value,
-      role: $('#au_role').value
-    };
-    if (!payload.username || !payload.password || !payload.full_name) return alert('Lengkapi data user');
-    try{
-      await apiPost('createUser', { user:SESSION, payload });
-      alert('User dibuat');
-      dlg.close();
-    }catch(e){ alert(e.message||e); }
+    <div class="row-end" style="margin-top:.6rem"><button class="btn primary" id="au_save">保存</button></div>`;
+  showDialog('dlgTicket', html);
+  document.getElementById('au_save').onclick = async ()=>{
+    const payload={ username:$('#au_username').value.trim(), password:$('#au_password').value.trim(), full_name:$('#au_fullname').value.trim(), department:$('#au_dept').value, role:$('#au_role').value };
+    if(!payload.username||!payload.password||!payload.full_name) return alert('必須項目');
+    try{ await apiPost('createUser',{user:SESSION,payload}); alert('作成しました'); document.getElementById('dlgTicket').close(); }catch(e){ alert(e.message||e); }
   };
-  footer.insertBefore(saveBtn, footer.lastChild);
+}
+
+/* ============ QR スキャン ============ */
+let scanStream=null, scanTimer=null;
+function openScanModal(){
+  $('#dlgScan').showModal();
+  $('#scanResult').textContent='カメラを開始してください';
+}
+async function scanStart(){
+  try{
+    if (scanStream) return;
+    const v=$('#scanVideo'); const c=$('#scanCanvas'); const ctx=c.getContext('2d');
+    const st = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' }, audio:false });
+    scanStream=st; v.srcObject=st; await v.play();
+    scanTimer = setInterval(async ()=>{
+      c.width=v.videoWidth; c.height=v.videoHeight;
+      ctx.drawImage(v,0,0,c.width,c.height);
+      const img=ctx.getImageData(0,0,c.width,c.height);
+      const code = jsQR(img.data, img.width, img.height);
+      if (code && code.data){
+        const text=code.data.trim();
+        $('#scanResult').textContent='読み取り: '+text;
+        if (/^PO-/.test(text)){
+          const status=$('#scanStatus').value, proc=$('#scanProcess').value;
+          try{
+            await apiPost('updateOrder',{po_id:text, updates:{status:status,current_process:proc}, user:SESSION});
+            $('#scanResult').textContent=`更新完了: ${text} → ${status} / ${proc}`;
+            refreshAll(true);
+          }catch(e){ $('#scanResult').textContent='更新失敗: '+(e.message||e); }
+        }else{
+          $('#scanResult').textContent='PO形式ではありません: '+text;
+        }
+      }
+    }, 500);
+  }catch(e){ alert('カメラ起動失敗: '+(e.message||e)); }
+}
+function scanClose(){
+  clearInterval(scanTimer); scanTimer=null;
+  if (scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+  $('#dlgScan').close();
 }
