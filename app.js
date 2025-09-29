@@ -1,16 +1,15 @@
 /* ===== Config ===== */
-const API_BASE = "https://script.google.com/macros/s/AKfycbwSJk2nkj14uUDcCBIPBKy1R-fIQszx_gAZwAZrNkHiy4BGSZPvajVzbLFntV0Ytmq-uQ/exec";  // /exec
+const API_BASE = "https://script.google.com/macros/s/AKfycbxvbZk2wrfPq39pFjRuZoIqdLnfvhfFDD1RlSKiyXtR040nFcBQORJpot4mhFOoJ7SGlw/exec";  // /exec
 const API_KEY  = ""; // optional
 
 const PROCESSES = ['レーザ加工','曲げ加工','外枠組立','シャッター組立','シャッター溶接','コーキング','外枠塗装','組立（組立中）','組立（組立済）','外注','検査工程'];
 
 /** STATION_RULES:
- *  Menghasilkan {current_process, status} baru
- *  berdasarkan data saat ini (o.current_process, o.status).
- *  - 組立工程: toggle 組立（組立中） <-> 組立（組立済）
- *  - 検査工程: 1st → set process 検査工程; 2nd → set status 検査済
- *  - 出荷工程: 1st → 出荷準備; 2nd → 出荷済
- *  - Lainnya: hanya set proses sesuai stasiun
+ * Toggle/update proses/status berdasarkan kondisi saat ini
+ * - 組立工程: toggle 組立（組立中） <-> 組立（組立済）
+ * - 検査工程: 1st → set process 検査工程; 2nd → set status 検査済
+ * - 出荷工程: 1st → 出荷準備; 2nd → 出荷済
+ * - Lainnya: set proses sesuai stasiun
  */
 const STATION_RULES = {
   'レーザ加工': (o)=> ({ current_process:'レーザ加工' }),
@@ -26,10 +25,8 @@ const STATION_RULES = {
   },
   '検査工程':   (o)=> {
     if (o.current_process==='検査工程' && o.status!=='検査保留' && o.status!=='不良品（要リペア）' && o.status!=='検査済'){
-      // scan ke-2 → set検査済
       return { current_process:'検査工程', status:'検査済' };
     }
-    // scan pertama → masuk工程 検査工程
     return { current_process:'検査工程' };
   },
   '出荷工程':   (o)=> {
@@ -43,7 +40,7 @@ const fmtDT = s=> s? new Date(s).toLocaleString(): '';
 const fmtD  = s=> s? new Date(s).toLocaleDateString(): '';
 
 let SESSION=null;
-let CURRENT_PO=null; // target saat scan
+let CURRENT_PO=null;
 let scanStream=null, scanTimer=null;
 
 /* ===== API ===== */
@@ -105,7 +102,7 @@ function show(id){ ['authView','pageDash','pagePlan','pageShip'].forEach(x=>docu
 function enter(){
   $('#userInfo').textContent = `${SESSION.full_name}・${SESSION.department}`;
   ['btnLogout','btnChangePass','btnToDash','btnToPlan','btnToShip','btnShowStationQR'].forEach(id=>$('#'+id).classList.remove('hidden'));
-  // Add user hanya untuk 生産技術 atau admin
+  // Add user di navbar untuk 生産技術/admin
   if (SESSION.role==='admin' || SESSION.department==='生産技術') $('#btnAddUserWeb').classList.remove('hidden');
   else $('#btnAddUserWeb').classList.add('hidden');
   $('#btnAddUserWeb').onclick = openAddUserModal;
@@ -189,7 +186,6 @@ async function renderOrders(){
 
 /* ===== 生産計画 CRUD ===== */
 async function createOrderUI(){
-  // 生産技術/生産管理部/admin
   if(!(SESSION.role==='admin'||SESSION.department==='生産技術'||SESSION.department==='生産管理部')) return alert('権限不足');
   const p={'通知書番号':$('#c_tsuchi').value.trim(),'得意先':$('#c_tokui').value.trim(),'得意先品番':$('#c_tokui_hin').value.trim(),'製番号':$('#c_sei').value.trim(),'品名':$('#c_hinmei').value.trim(),'品番':$('#c_hinban').value.trim(),'図番':$('#c_zuban').value.trim(),'管理No':$('#c_kanri').value.trim()};
   const editingPo=$('#c_po').value.trim();
@@ -292,22 +288,28 @@ function downloadCSV(name,rows){
 }
 function downloadFile(name,content){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([content],{type:'text/csv'})); a.download=name; a.click(); }
 
-/* ===== Station QR ===== */
+/* ===== Station QR (NO GUARD — semua user bisa cetak) ===== */
 function openStationQR(){
-  // tampil untuk 生産技術/admin; kalau mau semua boleh lihat, hapus if ini
-  if(!(SESSION.role==='admin'||SESSION.department==='生産技術')) return alert('権限不足（生産技術）');
-  const wrap=$('#qrWrap'); wrap.innerHTML='';
+  const wrap=$('#qrWrap'); if(!wrap){ alert('QRコンテナが見つかりません'); return; }
+  wrap.innerHTML='';
   const stations=['レーザ加工','曲げ工程','外枠組立','シャッター組立','シャッター溶接','コーキング','外枠塗装','組立工程','検査工程','出荷工程'];
   stations.forEach(st=>{
     const div=document.createElement('div'); div.className='tile';
     div.innerHTML=`<div><b>${st}</b></div><canvas></canvas><div class="s muted">内容: ST:${st}</div>`;
     wrap.appendChild(div);
-    const canvas=div.querySelector('canvas'); QRCode.toCanvas(canvas, 'ST:'+st, {width:180}, err=>{ if(err) console.error(err); });
+    const canvas=div.querySelector('canvas');
+    if (window.QRCode && QRCode.toCanvas){
+      QRCode.toCanvas(canvas, 'ST:'+st, {width:180}, err=>{ if(err) console.error(err); });
+    }else{
+      const ctx=canvas.getContext('2d'); canvas.width=180; canvas.height=180;
+      ctx.fillStyle='#eee'; ctx.fillRect(0,0,180,180);
+      ctx.fillStyle='#333'; ctx.fillText('ST:'+st, 10, 90);
+    }
   });
-  document.getElementById('dlgStationQR').showModal();
+  const dlg=document.getElementById('dlgStationQR'); if(dlg && dlg.showModal) dlg.showModal();
 }
 
-/* ===== Scan flow: 「更新」→ scan station → toggle berdasarkan STATION_RULES ===== */
+/* ===== Scan flow (toggle berdasarkan STATION_RULES) ===== */
 function startScanFor(po_id){
   CURRENT_PO=po_id;
   $('#scanPO').textContent=po_id;
@@ -325,16 +327,14 @@ async function scanStart(){
       const img=ctx.getImageData(0,0,c.width,c.height);
       const code=jsQR(img.data,img.width,img.height);
       if(code && code.data){
-        const text=code.data.trim();
-        $('#scanResult').textContent='読み取り: '+text;
+        const text=code.data.trim(); $('#scanResult').textContent='読み取り: '+text;
         if(/^ST:/.test(text) && CURRENT_PO){
           const station=text.slice(3);
           const rule=STATION_RULES[station];
           if(!rule){ $('#scanResult').textContent='未知のステーション: '+station; return; }
           try{
-            // dapatkan kondisi sekarang dulu
             const cur=await apiGet({action:'ticket',po_id:CURRENT_PO});
-            const updates=rule(cur); // hasil dari rule
+            const updates=rule(cur);
             await apiPost('updateOrder',{po_id:CURRENT_PO,updates,user:SESSION});
             $('#scanResult').textContent=`更新完了: ${CURRENT_PO} → ${updates.status||'(状態変更なし)'} / ${updates.current_process||cur.current_process}`;
             refreshAll(true);
