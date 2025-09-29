@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ERP Mini</title>
-  <link rel="icon" href="tsh.png">
+  <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script defer src="app.js"></script>
@@ -17,6 +17,7 @@
     </div>
     <div class="nav-right">
       <span id="userInfo" class="muted"></span>
+      <button id="btnChangePass" class="btn ghost hidden">Ganti Password</button>
       <button id="btnLogout" class="btn ghost hidden">Logout</button>
     </div>
   </nav>
@@ -47,7 +48,7 @@
           </select>
         </div>
         <button id="btnNewUser" class="btn ghost full">Tambah User</button>
-        <p class="muted s">Login dulu sebagai admin/生産管理 untuk menambah user. Pertama kali, pakai <code>admin/admin123</code> (dibuat otomatis jika tabel Users kosong).</p>
+        <p class="muted s">Login dulu sebagai admin/生産管理. Pertama kali: <code>admin/admin123</code> (dibuat otomatis bila sheet Users kosong).</p>
       </details>
       <div class="row gap" style="margin-top:.8rem">
         <button id="btnLogin" class="btn primary grow">Login</button>
