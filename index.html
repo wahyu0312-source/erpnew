@@ -4,17 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>ERP Mini</title>
-  <link rel="icon" href="assets/logo.png">
+  <link rel="icon" href="tsh.png">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
   <nav class="nav">
     <div class="nav-left">
-      <img id="logoImg" src="assets/logo.png" class="logo" alt="Logo">
+      <img src="assets/logo.png" class="logo" alt="Logo">
       <span class="brand">ERP Mini</span>
     </div>
     <div class="nav-right">
@@ -26,41 +24,33 @@
   <!-- LOGIN -->
   <main id="authView" class="container">
     <section class="card card-tight">
-      <h2>Login</h2>
+      <h2>Login (Spreadsheet DB)</h2>
       <div class="grid">
-        <label>Username
-          <input id="inUser" placeholder="mis. pm1">
-        </label>
-        <label>Password
-          <input id="inPass" type="password" placeholder="••••••••">
-        </label>
+        <input id="inUser" placeholder="username (mis. admin)">
+        <input id="inPass" type="password" placeholder="password">
       </div>
-
       <details class="card" style="margin-top:.8rem">
-        <summary><strong>Buat User Baru (Admin)</strong></summary>
+        <summary><strong>Tambah User (Admin)</strong></summary>
         <div class="grid" style="margin-top:.6rem">
           <input id="nuUser" placeholder="username baru">
           <input id="nuPass" type="password" placeholder="password">
-          <input id="nuName" placeholder="Full Name">
+          <input id="nuName" placeholder="Nama lengkap">
           <select id="nuDept">
             <option value="生産管理">生産管理</option>
             <option value="製造部">製造部</option>
             <option value="検査部">検査部</option>
           </select>
           <select id="nuRole">
+            <option value="member">member</option>
             <option value="manager">manager</option>
-            <option value="member" selected>member</option>
             <option value="admin">admin</option>
           </select>
         </div>
         <button id="btnNewUser" class="btn ghost full">Tambah User</button>
-        <p class="muted s">Hanya bisa dipakai setelah **login sebagai admin**.<br>
-        Kalau tabel user kosong, login pertama pakai credential dari kode: <code>admin / admin123</code> (bisa diganti di <code>app.js</code>), dan akun admin akan dibuat otomatis.</p>
+        <p class="muted s">Login dulu sebagai admin/生産管理 untuk menambah user. Pertama kali, pakai <code>admin/admin123</code> (dibuat otomatis jika tabel Users kosong).</p>
       </details>
-
       <div class="row gap" style="margin-top:.8rem">
         <button id="btnLogin" class="btn primary grow">Login</button>
-        <button id="btnFirstHelp" class="btn ghost grow">Petunjuk Awal</button>
       </div>
     </section>
   </main>
@@ -77,7 +67,6 @@
               <button class="btn ghost" onclick="window.print()">Print</button>
             </div>
           </header>
-
           <div class="grid-3">
             <div class="stat">
               <div class="muted s">Stok Barang Jadi</div>
