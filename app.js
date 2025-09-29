@@ -1,7 +1,7 @@
 /* ====== CONFIG ====== */
 const SUPABASE_URL = "https://gyafcazspbecugjmhqjk.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd5YWZjYXpzcGJlY3Vnam1ocWprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxMDEwMjEsImV4cCI6MjA3NDY3NzAyMX0.TaRWelu2eVGMQCXLcqVRgQ2lDTMstP_l33x2TPC6Fbs"; // Settings → API → Project API keys
-const LOGO_SRC = "assets/logo.png"; // atau URL public Supabase Storage
+const LOGO_SRC = "tsh.png"; // atau URL public Supabase Storage
 
 const PROCESSES = [
   'レーザ工程','曲げ工程','外枠組立工程','シャッター組立工程','シャッター溶接工程',
