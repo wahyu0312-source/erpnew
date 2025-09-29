@@ -1,26 +1,29 @@
 /* ================= CONFIG ================= */
-// Ganti dengan URL Web App /exec hasil Deploy
+// Ganti ini dengan URL Web App /exec hasil Deploy di Apps Script
 const API_BASE = "https://script.google.com/macros/s/AKfycbzjiN5ePhvRAs6fTKEraiEXXOFP-OndOFgw1VuAH2i5SX2-z3CGYHXr3_m8SHG01gFyFA/exec"; // contoh: https://script.google.com/macros/s/AKfycb.../exec
-const API_KEY  = ""; // opsional: kalau CONF.API_TOKEN di Code.gs diisi, taruh lagi di sini
+const API_KEY  = ""; // opsional: isi jika Code.gs CONF.API_TOKEN diisi
 
+// Daftar proses & status referensi (untuk tampilan dan validasi ringan)
 const PROCESSES = [
   'レーザ工程','曲げ工程','外枠組立工程','シャッター組立工程','シャッター溶接工程',
   'コーキング工程','外枠塗装工程','組立工程（組立中）','組立工程（組立済）','外注','検査工程'
 ];
 const STATUSES = ['生産開始','検査保留','検査済','出荷準備','出荷済','不良品（要リペア）'];
 
+/* ================= UTIL ================= */
 const $ = sel => document.querySelector(sel);
 const fmtDT = s => s ? new Date(s).toLocaleString() : '';
+const fmtD = s => s ? new Date(s).toLocaleDateString() : '';
 
-let SESSION = null;
+let SESSION = null; // {username, full_name, department, role}
 
 /* ================= API WRAPPER (tanpa preflight) ================= */
 async function apiPost(action, body){
   const payload = { action, ...body };
-  if (API_KEY) payload.apiKey = API_KEY;
+  if (API_KEY) payload.apiKey = API_KEY; // jika kamu aktifkan token di server
   const res = await fetch(API_BASE, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // penting agar tanpa preflight
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // penting agar tidak memicu preflight
     body: JSON.stringify(payload)
   });
   if (!res.ok) throw new Error('Network error: ' + res.status);
@@ -37,37 +40,66 @@ async function apiGet(params){
   return j.data;
 }
 
-/* ================= AUTH ================= */
+/* ================= BOOT ================= */
 window.addEventListener('DOMContentLoaded', ()=>{
-  $('#btnLogin').onclick = onLogin;
-  $('#btnNewUser').onclick = addUserUI;
-  $('#btnLogout').onclick = ()=>{ SESSION=null; localStorage.removeItem('erp_session'); location.reload(); };
-  $('#btnChangePass').onclick = changePasswordUI;
+  // Hook elemen standar yang sudah ada di index.html
+  bindLoginSection();
+  bindAppSection();
 
-  $('#btnRefresh').onclick = refreshAll;
-  $('#btnCreateOrder').onclick = createOrderUI;
-  $('#btnSchedule').onclick = scheduleUI;
-  $('#btnExportOrders').onclick = exportOrdersCSV;
-  $('#btnExportShip').onclick = exportShipCSV;
-  $('#btnShipByPO').onclick = ()=>{ const po=$('#s_po').value.trim(); if(!po) return alert('Isi PO'); openShipByPO(po); };
-  $('#btnShipByID').onclick = ()=>{ const id=prompt('Ship ID:'); if(!id) return; openShipByID(id.trim()); };
-  $('#searchQ').addEventListener('input', renderOrders);
-
+  // Restore sesi
   const saved = localStorage.getItem('erp_session');
   if (saved){ SESSION=JSON.parse(saved); enterApp(); } else { showAuth(); }
+
+  // Sisipkan UI “Tambah User via Web” (navbar + modal) kalau belum ada
+  ensureAddUserUI();
 });
+
+/* ================= AUTH ================= */
+function bindLoginSection(){
+  const btnLogin = $('#btnLogin');
+  const btnNewUser = $('#btnNewUser');
+  const btnLogout = $('#btnLogout');
+  const btnChangePass = $('#btnChangePass');
+
+  if (btnLogin) btnLogin.onclick = onLogin;
+  if (btnNewUser) btnNewUser.onclick = addUserFromLoginUI;
+  if (btnLogout) btnLogout.onclick = ()=>{ SESSION=null; localStorage.removeItem('erp_session'); location.reload(); };
+  if (btnChangePass) btnChangePass.onclick = changePasswordUI;
+}
+
+function bindAppSection(){
+  const btnRefresh = $('#btnRefresh');
+  const btnCreateOrder = $('#btnCreateOrder');
+  const btnSchedule = $('#btnSchedule');
+  const btnExportOrders = $('#btnExportOrders');
+  const btnExportShip = $('#btnExportShip');
+  const btnShipByPO = $('#btnShipByPO');
+  const btnShipByID = $('#btnShipByID');
+  const searchQ = $('#searchQ');
+
+  if (btnRefresh) btnRefresh.onclick = refreshAll;
+  if (btnCreateOrder) btnCreateOrder.onclick = createOrderUI;
+  if (btnSchedule) btnSchedule.onclick = scheduleUI;
+  if (btnExportOrders) btnExportOrders.onclick = exportOrdersCSV;
+  if (btnExportShip) btnExportShip.onclick = exportShipCSV;
+  if (btnShipByPO) btnShipByPO.onclick = ()=>{ const po=$('#s_po').value.trim(); if(!po) return alert('Isi PO'); openShipByPO(po); };
+  if (btnShipByID) btnShipByID.onclick = ()=>{ const id=prompt('Ship ID:'); if(!id) return; openShipByID(id.trim()); };
+  if (searchQ) searchQ.addEventListener('input', renderOrders);
+}
 
 async function onLogin(){
   const username = $('#inUser').value.trim();
   const password = $('#inPass').value.trim();
   try{
     const user = await apiPost('login', { username, password });
-    SESSION = user; localStorage.setItem('erp_session', JSON.stringify(SESSION));
+    SESSION = user;
+    localStorage.setItem('erp_session', JSON.stringify(SESSION));
     enterApp();
   }catch(e){ alert(e.message || e); }
 }
 
-async function addUserUI(){
+// “Tambah user” di panel login (detail-section)
+async function addUserFromLoginUI(){
   if (!SESSION) return alert('Login dulu');
   if (!(SESSION.role==='admin' || SESSION.department==='生産管理')) return alert('Hanya admin/生産管理');
 
@@ -97,18 +129,27 @@ async function changePasswordUI(){
 }
 
 function enterApp(){
-  $('#userInfo').textContent = `${SESSION.full_name} • ${SESSION.department}`;
-  $('#btnLogout').classList.remove('hidden');
-  $('#btnChangePass').classList.remove('hidden');
-  $('#authView').classList.add('hidden');
-  $('#appView').classList.remove('hidden');
-  loadMasters(); refreshAll();
+  // Navbar info + tombol
+  const userInfo = $('#userInfo');
+  const btnLogout = $('#btnLogout');
+  const btnChangePass = $('#btnChangePass');
+  if (userInfo) userInfo.textContent = `${SESSION.full_name} • ${SESSION.department}`;
+  if (btnLogout) btnLogout.classList.remove('hidden');
+  if (btnChangePass) btnChangePass.classList.remove('hidden');
+
+  // Switch view
+  $('#authView')?.classList.add('hidden');
+  $('#appView')?.classList.remove('hidden');
+
+  loadMasters();
+  refreshAll();
 }
+
 function showAuth(){
-  $('#btnLogout').classList.add('hidden');
-  $('#btnChangePass').classList.add('hidden');
-  $('#authView').classList.remove('hidden');
-  $('#appView').classList.add('hidden');
+  $('#btnLogout')?.classList.add('hidden');
+  $('#btnChangePass')?.classList.add('hidden');
+  $('#authView')?.classList.remove('hidden');
+  $('#appView')?.classList.add('hidden');
 }
 
 /* ================= MASTERS ================= */
@@ -135,14 +176,14 @@ async function createOrderUI(){
   };
   try{
     const r = await apiPost('createOrder', { payload, user:SESSION });
-    alert('Order dibuat: '+r.po_id); refreshAll();
+    alert('Order dibuat: '+r.po_id);
+    refreshAll();
   }catch(e){ alert(e.message||e); }
 }
 
 async function listOrders(){
-  const q = $('#searchQ').value.trim();
-  const rows = await apiGet({ action:'listOrders', q });
-  return rows;
+  const q = $('#searchQ')?.value.trim() || '';
+  return apiGet({ action:'listOrders', q });
 }
 async function renderOrders(){
   const rows = await listOrders();
@@ -165,6 +206,7 @@ async function renderOrders(){
       </td>
     </tr>`).join('');
 }
+
 async function promptUpdate(po_id, curStatus, curProc){
   const status = prompt('Status baru (生産開始/検査保留/検査済/出荷準備/出荷済/不良品（要リペア）):', curStatus||'');
   if (status===null) return;
@@ -172,7 +214,8 @@ async function promptUpdate(po_id, curStatus, curProc){
   const note = prompt('Catatan (opsional):','')||'';
   try{
     await apiPost('updateOrder', { po_id, updates:{ status, current_process:proc, note }, user:SESSION });
-    alert('Updated'); refreshAll(true);
+    alert('Updated');
+    refreshAll(true);
   }catch(e){ alert(e.message||e); }
 }
 
@@ -184,7 +227,8 @@ async function scheduleUI(){
   if (!po_id || !dateIso) return alert('Isi PO & tanggal');
   try{
     const r = await apiPost('scheduleShipment', { po_id, dateIso, qty, user:SESSION });
-    alert('Shipment dibuat: '+r.ship_id); refreshAll(true);
+    alert('Shipment dibuat: '+r.ship_id);
+    refreshAll(true);
   }catch(e){ alert(e.message||e); }
 }
 async function openShipByPO(po_id){
@@ -210,7 +254,7 @@ async function refreshAll(keepSearch=false){
 
     const today = await apiGet({ action:'todayShip' });
     $('#listToday').innerHTML = today.length
-      ? today.map(r=> `<div><span>${r.po_id}</span><span>${new Date(r.scheduled_date).toLocaleDateString()} • Qty ${r.qty}</span></div>`).join('')
+      ? today.map(r=> `<div><span>${r.po_id}</span><span>${fmtD(r.scheduled_date)} • Qty ${r.qty}</span></div>`).join('')
       : '<div class="muted">Tidak ada jadwal hari ini</div>';
 
     const loc = await apiGet({ action:'locSnapshot' });
@@ -218,7 +262,8 @@ async function refreshAll(keepSearch=false){
 
     if (!keepSearch) $('#searchQ').value='';
 
-    await renderOrders(); await renderCharts();
+    await renderOrders();
+    await renderCharts();
   }catch(e){ console.error(e); }
 }
 let chM=null,chC=null,chS=null;
@@ -264,9 +309,10 @@ async function openTicket(po_id){
       <p><b>現在ステータス：</b>${o.status}　<b>工程：</b>${o.current_process}</p>
       <p style="font-size:12px;color:#555">更新: ${fmtDT(o.updated_at)} / ${o.updated_by||''}</p>
     </div>`;
-    $('#ticketBody').innerHTML = body; $('#dlgTicket').showModal();
+    showDialog('dlgTicket', body, true);
   }catch(e){ alert(e.message||e); }
 }
+
 function showShipDoc(s,o){
   const dt = s.scheduled_date ? new Date(s.scheduled_date) : null;
   const body = `
@@ -295,5 +341,125 @@ function showShipDoc(s,o){
       <div><b>品質管理</b><div style="height:40px;border-bottom:1px solid #000"></div></div>
     </div>
   </div>`;
-  $('#shipBody').innerHTML = body; $('#dlgShip').showModal();
+  showDialog('dlgShip', body, true);
+}
+async function openShipByID(id){
+  const d=await apiGet({action:'shipById', ship_id:id});
+  showShipDoc(d.shipment,d.order);
+}
+
+/* ================= EXPORT ================= */
+async function exportOrdersCSV(){
+  const rows = await apiGet({ action:'listOrders' });
+  downloadCSV('orders.csv', rows||[]);
+}
+async function exportShipCSV(){
+  const rows = await apiGet({ action:'todayShip' });
+  downloadCSV('shipments_today.csv', rows||[]);
+}
+function downloadCSV(name, rows){
+  if(!rows.length) return downloadFile(name,'');
+  const headers=Object.keys(rows[0]);
+  const csv=[headers.join(',')].concat(rows.map(r=> headers.map(h=> String(r[h]??'').replaceAll('"','""')).map(v=>`"${v}"`).join(','))).join('\n');
+  downloadFile(name,csv);
+}
+function downloadFile(name, content){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type:'text/csv'}));
+  a.download=name; a.click();
+}
+
+/* ================= GENERIC DIALOG ================= */
+function showDialog(id, innerHTML, printable=false){
+  let dlg = document.getElementById(id);
+  if (!dlg){
+    dlg = document.createElement('dialog');
+    dlg.id = id; dlg.className = 'paper';
+    dlg.innerHTML = `<div class="body"></div><footer class="row-end"></footer>`;
+    document.body.appendChild(dlg);
+  }
+  dlg.querySelector('.body').innerHTML = innerHTML;
+  const footer = dlg.querySelector('footer');
+  footer.innerHTML = '';
+  if (printable){
+    const b1 = document.createElement('button'); b1.className='btn ghost'; b1.textContent='Print'; b1.onclick = ()=>window.print();
+    footer.appendChild(b1);
+  }
+  const b2 = document.createElement('button'); b2.className='btn'; b2.textContent='Tutup'; b2.onclick = ()=>dlg.close();
+  footer.appendChild(b2);
+  dlg.showModal();
+}
+
+/* ================= TAMBAH USER via WEB (NAVBAR) ================= */
+function ensureAddUserUI(){
+  // tampilkan hanya untuk admin/生産管理 ketika sudah login
+  const navRight = document.querySelector('.nav .nav-right') || document.querySelector('.nav');
+  if (!navRight) return;
+
+  // sisipkan tombol bila belum ada
+  let btn = document.getElementById('btnAddUserWeb');
+  if (!btn){
+    btn = document.createElement('button');
+    btn.id = 'btnAddUserWeb';
+    btn.className = 'btn ghost hidden';
+    btn.textContent = 'Tambah User';
+    btn.onclick = openAddUserModal;
+    navRight.insertBefore(btn, document.getElementById('btnChangePass') || null);
+  }
+
+  // saat user berganti (enterApp dipanggil), toggle akan diatur lagi
+  const _origEnter = enterApp;
+  enterApp = function(){
+    _origEnter();
+    const canAdmin = SESSION && (SESSION.role==='admin' || SESSION.department==='生産管理');
+    if (canAdmin) btn.classList.remove('hidden'); else btn.classList.add('hidden');
+  }
+}
+
+function openAddUserModal(){
+  if (!SESSION) return alert('Login dulu');
+  if (!(SESSION.role==='admin' || SESSION.department==='生産管理')) return alert('Hanya admin/生産管理');
+
+  const body = `
+    <h3 style="margin:0 0 8px 0">Tambah User</h3>
+    <div class="grid">
+      <input id="au_username" placeholder="username">
+      <input id="au_password" type="password" placeholder="password">
+      <input id="au_fullname" placeholder="Nama lengkap">
+      <select id="au_dept">
+        <option value="生産管理">生産管理</option>
+        <option value="製造部">製造部</option>
+        <option value="検査部">検査部</option>
+      </select>
+      <select id="au_role">
+        <option value="member">member</option>
+        <option value="manager">manager</option>
+        <option value="admin">admin</option>
+      </select>
+    </div>
+  `;
+  showDialog('dlgAddUser', body, false);
+
+  // tambahkan tombol Simpan ke footer
+  const dlg = document.getElementById('dlgAddUser');
+  const footer = dlg.querySelector('footer');
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn primary';
+  saveBtn.textContent = 'Simpan';
+  saveBtn.onclick = async ()=>{
+    const payload = {
+      username: $('#au_username').value.trim(),
+      password: $('#au_password').value.trim(),
+      full_name: $('#au_fullname').value.trim(),
+      department: $('#au_dept').value,
+      role: $('#au_role').value
+    };
+    if (!payload.username || !payload.password || !payload.full_name) return alert('Lengkapi data user');
+    try{
+      await apiPost('createUser', { user:SESSION, payload });
+      alert('User dibuat');
+      dlg.close();
+    }catch(e){ alert(e.message||e); }
+  };
+  footer.insertBefore(saveBtn, footer.lastChild);
 }
