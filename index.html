@@ -1,123 +1,162 @@
-<!DOCTYPE html>
-<html lang="ja">
+<!doctype html>
+<html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ミニERPシステム</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide-react@0.378.0/dist/lucide.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    <link rel="stylesheet" href="style.css">
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: { DEFAULT: '#4f46e5', hover: '#4338ca', light: '#e0e7ff' },
-                        secondary: '#10b981', danger: '#ef4444', 
-                        slate: { 50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#cbd5e1', 400: '#94a3b8', 500: '#64748b', 600: '#475569', 700: '#334155', 800: '#1e293b', 900: '#0f172a' }
-                    }
-                }
-            }
-        }
-    </script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ERP Mini</title>
+  <link rel="icon" href="assets/logo.png">
+  <link rel="stylesheet" href="style.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Supabase JS v2 -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="app.js"></script>
 </head>
-<body class="bg-slate-100 text-slate-800">
-
-    <div class="flex h-screen">
-        <!-- Sidebar Navigation -->
-        <aside class="w-64 bg-slate-900 text-slate-200 flex flex-col">
-            <div class="p-4 border-b border-slate-700 flex flex-col items-center text-center">
-                <img src="https://placehold.co/120x50/0f172a/FFFFFF?text=Logo" alt="Company Logo" class="mb-4 h-12 rounded-md">
-                <h1 class="text-xl font-bold text-white">Wahyu ERP system</h1>
-                <p class="text-xs text-slate-400 mt-2">Design by Wahyu</p>
-            </div>
-            <nav class="flex-1 p-3 space-y-2">
-                <a href="#" data-view="dashboard" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700 sidebar-active"><i data-lucide="layout-dashboard" class="w-5 h-5"></i> ダッシュボード</a>
-                <a href="#" data-view="orders" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700"><i data-lucide="shopping-cart" class="w-5 h-5"></i> 注文管理</a>
-                <a href="#" data-view="inventory" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700"><i data-lucide="boxes" class="w-5 h-5"></i> 在庫管理</a>
-                <a href="#" data-view="station" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700"><i data-lucide="scan-line" class="w-5 h-5"></i> 作業ステーション</a>
-                
-                <a href="https://kensa-portal.vercel.app" target="_blank" rel="noopener noreferrer" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors duration-200 hover:bg-slate-700">
-                    <i data-lucide="shield-check" class="w-5 h-5"></i> 品質ポータル
-                </a>
-            </nav>
-        </aside>
-
-        <!-- Main Content -->
-        <main class="flex-1 p-8 overflow-y-auto">
-            <div id="loading-spinner" class="hidden fixed inset-0 bg-white bg-opacity-70 flex items-center justify-center z-50 backdrop-blur-sm"><div class="animate-spin rounded-full h-16 w-16 border-b-4 border-primary"></div></div>
-
-            <!-- Dashboard View -->
-            <div id="dashboard" class="view">
-                <h2 class="text-3xl font-bold text-slate-900 tracking-tight mb-8">ダッシュボード</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200 flex items-center gap-5"><div class="bg-primary-light p-3 rounded-full"><i data-lucide="package" class="text-primary"></i></div><div><h3 class="text-slate-500 text-sm font-medium">総受注件数</h3><p id="total-po" class="text-3xl font-bold text-slate-800 mt-1">0</p></div></div>
-                    <div class="bg-yellow-100 p-6 rounded-xl shadow-lg border border-yellow-200 flex items-center gap-5"><div class="bg-yellow-200 p-3 rounded-full"><i data-lucide="loader-circle" class="text-yellow-600"></i></div><div><h3 class="text-slate-500 text-sm font-medium">進行中の作業指示</h3><p id="active-wo" class="text-3xl font-bold text-slate-800 mt-1">0</p></div></div>
-                    <div class="bg-green-100 p-6 rounded-xl shadow-lg border border-green-200 flex items-center gap-5"><div class="bg-green-200 p-3 rounded-full"><i data-lucide="check-circle" class="text-green-600"></i></div><div><h3 class="text-slate-500 text-sm font-medium">出荷準備完了</h3><p id="ready-to-ship" class="text-3xl font-bold text-slate-800 mt-1">0</p></div></div>
-                    <div class="bg-red-100 p-6 rounded-xl shadow-lg border border-red-200 flex items-center gap-5"><div class="bg-red-200 p-3 rounded-full"><i data-lucide="x-circle" class="text-red-600"></i></div><div><h3 class="text-slate-500 text-sm font-medium">保留 (NG)</h3><p id="hold-ng" class="text-3xl font-bold text-red-600 mt-1">0</p></div></div>
-                </div>
-                <div class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200"><h3 class="text-lg font-bold text-slate-700 mb-4 text-center">総注文</h3><canvas id="ordersChart"></canvas></div>
-                    <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200"><h3 class="text-lg font-bold text-slate-700 mb-4 text-center">出荷状況</h3><canvas id="shippedChart"></canvas></div>
-                    <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200"><h3 class="text-lg font-bold text-slate-700 mb-4 text-center">請求状況</h3><canvas id="invoiceChart"></canvas></div>
-                </div>
-                <div class="mt-8 bg-white p-6 rounded-xl shadow-lg border border-slate-200"><h3 class="text-lg font-bold text-slate-700 mb-4">最新の作業指示追跡</h3><div id="latest-wo-tracking" class="space-y-4"><p class="text-slate-500">アクティブな作業指示はありません。</p></div></div>
-            </div>
-
-            <!-- Orders View -->
-            <div id="orders" class="view hidden">
-                <div class="flex justify-between items-center mb-8">
-                    <h2 class="text-3xl font-bold text-slate-900 tracking-tight">注文管理</h2>
-                    <button id="add-po-btn" class="bg-primary text-white px-5 py-2.5 rounded-lg hover:bg-primary-hover flex items-center gap-2 shadow-md transition-colors duration-200 font-semibold"><i data-lucide="plus-circle" class="w-5 h-5"></i> 新規PO追加</button>
-                </div>
-                <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
-                    <h3 class="text-xl font-bold text-slate-800 mb-4">発注書 (PO)</h3>
-                    <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-slate-200"><th class="p-4 text-sm font-semibold text-slate-600">PO番号</th><th class="p-4 text-sm font-semibold text-slate-600">顧客名</th><th class="p-4 text-sm font-semibold text-slate-600">日付</th><th class="p-4 text-sm font-semibold text-slate-600">ステータス</th><th class="p-4 text-sm font-semibold text-slate-600">アクション</th></tr></thead><tbody id="po-table-body" class="divide-y divide-slate-200"></tbody></table></div>
-                </div>
-                <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200 mt-8">
-                    <h3 class="text-xl font-bold text-slate-800 mb-4">作業指示書 (WO)</h3>
-                    <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-slate-200"><th class="p-4 text-sm font-semibold text-slate-600">WO番号</th><th class="p-4 text-sm font-semibold text-slate-600">PO由来</th><th class="p-4 text-sm font-semibold text-slate-600">工程ステータス</th><th class="p-4 text-sm font-semibold text-slate-600">アクション</th></tr></thead><tbody id="wo-table-body" class="divide-y divide-slate-200"></tbody></table></div>
-                </div>
-            </div>
-
-            <!-- Inventory View -->
-            <div id="inventory" class="view hidden">
-                 <div class="flex justify-between items-center mb-8">
-                    <h2 class="text-3xl font-bold text-slate-900 tracking-tight">在庫管理</h2>
-                    <button id="add-inventory-btn" class="bg-secondary text-white px-5 py-2.5 rounded-lg hover:bg-emerald-600 flex items-center gap-2 shadow-md transition-colors duration-200 font-semibold"><i data-lucide="plus-circle" class="w-5 h-5"></i> 新規品目追加</button>
-                </div>
-                 <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200">
-                    <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="border-b border-slate-200"><th class="p-4 text-sm font-semibold text-slate-600">品目名</th><th class="p-4 text-sm font-semibold text-slate-600">SKU</th><th class="p-4 text-sm font-semibold text-slate-600">タイプ</th><th class="p-4 text-sm font-semibold text-slate-600">在庫数</th><th class="p-4 text-sm font-semibold text-slate-600">アクション</th></tr></thead><tbody id="inventory-table-body" class="divide-y divide-slate-200"></tbody></table></div>
-                </div>
-            </div>
-            
-            <!-- Operator Station View -->
-            <div id="station" class="view hidden">
-                <h2 class="text-3xl font-bold text-slate-900 tracking-tight mb-8">作業ステーション</h2>
-                <div class="max-w-md mx-auto bg-white p-8 rounded-xl shadow-lg border border-slate-200">
-                    <h3 class="text-xl font-bold text-center text-slate-800 mb-2">工程ステータス更新</h3>
-                    <p class="text-center text-slate-500 mb-6">作業指示番号を入力またはスキャンしてください。</p>
-                    <div id="qr-reader" class="w-full mb-4" style="display: none;"></div>
-                    <div class="flex gap-2">
-                        <input type="text" id="wo-scan-input" placeholder="WO番号" class="flex-grow px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
-                        <button id="scan-qr-btn" class="bg-slate-700 text-white px-4 py-2 rounded-lg hover:bg-slate-800 flex items-center gap-2 transition-colors duration-200"><i data-lucide="camera"></i></button>
-                        <button id="find-wo-btn" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors duration-200"><i data-lucide="search"></i></button>
-                    </div>
-                    <div id="wo-station-details" class="mt-6 hidden"></div>
-                </div>
-            </div>
-        </main>
+<body>
+  <nav class="nav">
+    <div class="nav-left">
+      <img id="logoImg" src="assets/logo.png" class="logo" alt="Logo">
+      <span class="brand">ERP Mini</span>
     </div>
+    <div class="nav-right">
+      <span id="userInfo" class="muted"></span>
+      <button id="btnLogout" class="btn ghost">Logout</button>
+    </div>
+  </nav>
 
-    <!-- Modals (Tidak berubah) -->
-    <div id="po-modal" class="modal-backdrop"><div class="bg-white rounded-xl shadow-2xl w-full max-w-lg m-4"><form id="po-form" class="p-8"><h3 class="text-2xl font-bold mb-6 text-slate-800">新規発注書を追加</h3><div class="space-y-4"><div><label for="po-number" class="block text-sm font-medium text-slate-600 mb-1">PO番号</label><input type="text" id="po-number" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required></div><div><label for="po-customer" class="block text-sm font-medium text-slate-600 mb-1">顧客名</label><input type="text" id="po-customer" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required></div></div><div class="mt-8 flex justify-end gap-3"><button type="button" class="cancel-btn bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200">キャンセル</button><button type="submit" class="bg-primary text-white font-semibold px-4 py-2 rounded-lg hover:bg-primary-hover transition-colors duration-200">保存</button></div></form></div></div>
-    <div id="inventory-modal" class="modal-backdrop"><div class="bg-white rounded-xl shadow-2xl w-full max-w-lg m-4"><form id="inventory-form" class="p-8"><h3 class="text-2xl font-bold mb-6 text-slate-800">在庫品目を追加/編集</h3><input type="hidden" id="inventory-id"><div class="space-y-4"><div><label for="inventory-name" class="block text-sm font-medium text-slate-600 mb-1">品目名</label><input type="text" id="inventory-name" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required></div><div><label for="inventory-sku" class="block text-sm font-medium text-slate-600 mb-1">SKU</label><input type="text" id="inventory-sku" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required></div><div><label for="inventory-type" class="block text-sm font-medium text-slate-600 mb-1">タイプ</label><select id="inventory-type" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white"><option value="原材料">原材料</option><option value="完成品">完成品</option></select></div><div><label for="inventory-quantity" class="block text-sm font-medium text-slate-600 mb-1">数量</label><input type="number" id="inventory-quantity" class="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" required min="0"></div></div><div class="mt-8 flex justify-end gap-3"><button type="button" class="cancel-btn bg-slate-200 text-slate-700 font-semibold px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors duration-200">キャンセル</button><button type="submit" class="bg-secondary text-white font-semibold px-4 py-2 rounded-lg hover:bg-emerald-600 transition-colors duration-200">保存</button></div></form></div></div>
-    <div id="qr-modal" class="modal-backdrop"><div class="bg-white rounded-xl shadow-2xl w-full max-w-sm m-4 p-8 text-center"><h3 class="text-2xl font-bold mb-2 text-slate-800">作業指示書 作成完了!</h3><p class="text-slate-600 mb-4">このQRコードを工程管理に使用します。</p><p id="qr-wo-number" class="font-mono text-lg mb-4 bg-slate-100 p-2 rounded-md"></p><div id="qrcode-container" class="flex justify-center my-4 p-4 bg-white rounded-lg border"></div><button class="cancel-btn mt-4 bg-primary text-white font-semibold px-6 py-2 rounded-lg hover:bg-primary-hover w-full transition-colors duration-200">閉じる</button></div></div>
-    
-    <script src="script.js"></script>
+  <!-- AUTH -->
+  <main id="authView" class="container">
+    <section class="card card-tight">
+      <h2>Masuk</h2>
+      <div class="grid">
+        <label>Email
+          <input id="inEmail" type="email" autocomplete="email">
+        </label>
+        <label>Password
+          <input id="inPass" type="password" autocomplete="current-password">
+        </label>
+      </div>
+      <div class="row gap">
+        <button id="btnLogin" class="btn primary grow">Login</button>
+        <button id="btnSignup" class="btn ghost grow">Sign Up</button>
+      </div>
+      <p class="muted s">Setelah Sign Up, isi profile di tabel <code>profiles</code> (full_name, department) lewat Supabase.</p>
+    </section>
+  </main>
+
+  <!-- APP -->
+  <main id="appView" class="container hidden">
+    <section class="grid-2">
+      <div>
+        <section class="card">
+          <header class="row-between">
+            <h3>Dashboard</h3>
+            <div class="row gap">
+              <button class="btn ghost" id="btnRefresh">Refresh</button>
+              <button class="btn ghost" onclick="window.print()">Print</button>
+            </div>
+          </header>
+
+          <div class="grid-3">
+            <div class="stat">
+              <div class="muted s">Stok Barang Jadi</div>
+              <div id="statFinished" class="stat-num">-</div>
+              <div class="muted s"><span id="statReady">-</span> ready • <span id="statShipped">-</span> shipped</div>
+            </div>
+            <div class="tile">
+              <div class="muted s">Rencana Pengiriman (Hari Ini)</div>
+              <div id="listToday" class="list s"></div>
+            </div>
+            <div class="tile">
+              <div class="muted s">Lokasi Barang (per proses)</div>
+              <div id="gridProc" class="grid grid-chips"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <header class="row-between">
+            <h3>Daftar Order</h3>
+            <div class="row gap">
+              <input id="searchQ" placeholder="Cari ..." class="input">
+              <button class="btn ghost" id="btnExportOrders">Export Orders CSV</button>
+              <button class="btn ghost" id="btnExportShip">Export Shipments CSV</button>
+            </div>
+          </header>
+          <div class="table-wrap">
+            <table class="table s">
+              <thead>
+                <tr>
+                  <th>PO</th><th>得意先</th><th>製番号</th><th>品名</th><th>品番</th><th>図番</th>
+                  <th>Status</th><th>Process</th><th>Updated</th><th>By</th><th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="tbOrders"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div>
+        <section class="card">
+          <h3>Rencana Produksi Baru</h3>
+          <div class="grid">
+            <input id="c_tsuchi" placeholder="通知書番号 (opsional)">
+            <input id="c_tokui" placeholder="得意先" list="dl_tokui">
+            <input id="c_tokui_hin" placeholder="得意先品番">
+            <input id="c_sei" placeholder="製番号">
+            <input id="c_hinmei" placeholder="品名" list="dl_hinmei">
+            <input id="c_hinban" placeholder="品番" list="dl_hinban">
+            <input id="c_zuban" placeholder="図番" list="dl_zuban">
+            <input id="c_kanri" placeholder="管理No (opsional)">
+          </div>
+          <datalist id="dl_tokui"></datalist>
+          <datalist id="dl_hinmei"></datalist>
+          <datalist id="dl_hinban"></datalist>
+          <datalist id="dl_zuban"></datalist>
+          <button id="btnCreateOrder" class="btn primary full">生産現品票 発行</button>
+        </section>
+
+        <section class="card">
+          <h3>Rencana Pengiriman</h3>
+          <div class="grid">
+            <input id="s_po" placeholder="PO ID">
+            <input id="s_date" type="date">
+            <input id="s_qty" type="number" min="0" placeholder="Qty">
+          </div>
+          <div class="row gap">
+            <button id="btnSchedule" class="btn primary grow">Jadwalkan</button>
+            <button id="btnShipByPO" class="btn ghost grow">出荷確認書（PO）</button>
+            <button id="btnShipByID" class="btn ghost grow">出荷確認書（Ship ID）</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <h3>Charts</h3>
+          <canvas id="chartMonthly" height="160"></canvas>
+          <hr>
+          <canvas id="chartCustomer" height="160"></canvas>
+          <hr>
+          <canvas id="chartStock" height="160"></canvas>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODALS -->
+  <dialog id="dlgTicket" class="paper">
+    <div id="ticketBody"></div>
+    <footer class="row-end">
+      <button class="btn ghost" onclick="window.print()">Print</button>
+      <button class="btn" onclick="document.getElementById('dlgTicket').close()">Tutup</button>
+    </footer>
+  </dialog>
+
+  <dialog id="dlgShip" class="paper">
+    <div id="shipBody"></div>
+    <footer class="row-end">
+      <button class="btn ghost" onclick="window.print()">Print</button>
+      <button class="btn" onclick="document.getElementById('dlgShip').close()">Tutup</button>
+    </footer>
+  </dialog>
 </body>
 </html>
-
