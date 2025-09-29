@@ -1,48 +1,45 @@
-/* Google Font */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
-
-/* Basic Styling */
-body {
-    font-family: 'Noto Sans JP', sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+:root{
+  --bg:#0b1020; --card:#121838; --border:#1e2a5a; --ink:#e8ecf8; --muted:#9fb0ffcc;
+  --primary:#3a5bfd; --chip:#0e1530;
 }
-
-/* Sidebar Active State */
-.sidebar-active {
-    background-color: #4f46e5; /* primary color */
-    color: white;
-    font-weight: 600;
-}
-.sidebar-active i {
-    color: white !important;
-}
-
-/* Modal Styling */
-.modal-backdrop {
-    display: none; /* Hidden by default */
-    position: fixed;
-    inset: 0;
-    background-color: rgba(15, 23, 42, 0.7); /* slate-900 with opacity */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 50;
-    backdrop-filter: blur(4px);
-}
-
-/* Custom Scrollbar for better aesthetics */
-main::-webkit-scrollbar {
-    width: 8px;
-}
-main::-webkit-scrollbar-track {
-    background: #f1f5f9; /* slate-100 */
-}
-main::-webkit-scrollbar-thumb {
-    background: #cbd5e1; /* slate-300 */
-    border-radius: 4px;
-}
-main::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8; /* slate-400 */
-}
-
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+.hidden{display:none !important}
+.muted{color:#b7c3ff99}
+.s{font-size:12px}
+.row{display:flex;align-items:center}
+.row-between{display:flex;align-items:center;justify-content:space-between}
+.row-end{display:flex;justify-content:flex-end;gap:.5rem}
+.row.gap{gap:.5rem}
+.grow{flex:1}
+.nav{position:sticky;top:0;z-index:5;display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;border-bottom:1px solid var(--border);background:#0e1530}
+.logo{height:36px}
+.brand{margin-left:.5rem;font-weight:700}
+.container{padding:1rem;max-width:1200px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1rem;margin-bottom:1rem}
+.card-tight{max-width:520px;margin:2rem auto}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.grid-2{display:grid;grid-template-columns:2fr 1fr;gap:1rem}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
+.grid-chips{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}
+@media(max-width:900px){ .grid-2{grid-template-columns:1fr} .grid-3{grid-template-columns:1fr} .grid-chips{grid-template-columns:repeat(2,1fr)} }
+.input, input, select, textarea{width:100%;padding:.7rem;border-radius:12px;border:1px solid #253163;background:#0e1530;color:var(--ink)}
+.btn{padding:.6rem 1rem;border-radius:12px;border:1px solid transparent;background:#2a3cff;color:#fff;cursor:pointer}
+.btn.primary{background:var(--primary)}
+.btn.ghost{background:transparent;border:1px solid #3a4570;color:var(--ink)}
+.btn.full{width:100%}
+.tile{background:#0e1530;border:1px solid #253163;border-radius:12px;padding:.8rem}
+.stat-num{font-size:36px;font-weight:800}
+.list > div{display:flex;justify-content:space-between;border-bottom:1px dashed #223; padding:.2rem 0}
+.table-wrap{overflow:auto;max-height:60vh;border:1px solid var(--border);border-radius:12px}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{padding:.5rem;border-bottom:1px solid #223}
+.badge{display:inline-block;padding:.2rem .5rem;border-radius:10px;background:#1b244a}
+.grid-chip{background:var(--chip);border:1px solid #253163;border-radius:10px;padding:.6rem;text-align:center}
+.paper{width:min(860px,96vw);border:0;padding:0;background:#fff;color:#000;border-radius:10px}
+.paper header{display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid #ddd}
+.paper .logo{height:40px}
+.paper .body{padding:16px}
+.paper table{width:100%;border-collapse:collapse}
+.paper th,.paper td{border:1px solid #555;padding:4px 6px;font-size:12px}
+hr{border-color:#223}
