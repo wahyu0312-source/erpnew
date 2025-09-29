@@ -290,11 +290,17 @@ function downloadFile(name,content){ const a=document.createElement('a'); a.href
 
 /* ===== Station QR (NO GUARD — semua user bisa cetak) ===== */
 function openStationQR(){
-  const wrap = $('#qrWrap'); if(!wrap){ alert('QRコンテナが見つかりません'); return; }
+  const wrap = document.querySelector('#qrWrap');
+  if(!wrap){ alert('QRコンテナが見つかりません'); return; }
   wrap.innerHTML = '';
-  const stations = ['レーザ加工','曲げ工程','外枠組立','シャッター組立','シャッター溶接','コーキング','外枠塗装','組立工程','検査工程','出荷工程'];
 
-  stations.forEach(async (st)=>{
+  const stations = [
+    'レーザ加工','曲げ工程','外枠組立','シャッター組立',
+    'シャッター溶接','コーキング','外枠塗装',
+    '組立工程','検査工程','出荷工程'
+  ];
+
+  stations.forEach((st)=>{
     const div = document.createElement('div');
     div.className = 'tile';
     div.innerHTML = `
@@ -302,44 +308,42 @@ function openStationQR(){
         <b>${st}</b>
         <a class="btn ghost s" target="_blank">PNG</a>
       </div>
-      <canvas style="background:#fff;border:1px solid #e3e6ef;border-radius:8px"></canvas>
+      <div class="qr-holder" style="background:#fff;border:1px solid #e3e6ef;border-radius:8px;display:inline-block"></div>
       <div class="s muted">内容: ST:${st}</div>`;
     wrap.appendChild(div);
 
-    const canvas = div.querySelector('canvas');
+    const holder = div.querySelector('.qr-holder');
     const link   = div.querySelector('a');
 
-    // Utama: gambar ke canvas
-    if (window.QRCode && QRCode.toCanvas){
-      QRCode.toCanvas(canvas, 'ST:'+st, { width: 200, margin: 2 }, (err)=>{
-        if (err) console.error(err);
-        try {
-          // Fallback PNG untuk download/print
-          if (QRCode.toDataURL){
-            QRCode.toDataURL('ST:'+st, { width: 800, margin: 2 }, (e, url)=>{
-              if (!e && url){ link.href = url; link.download = `ST-${st}.png`; }
-            });
-          } else {
-            // Kalau lib tak punya toDataURL, ambil dari canvas
-            const url = canvas.toDataURL('image/png');
-            link.href = url; link.download = `ST-${st}.png`;
-          }
-        } catch(e){ console.warn(e); }
-      });
-    } else {
-      // Sangat jarang: lib belum siap → placeholder
-      const ctx = canvas.getContext('2d');
-      canvas.width = 200; canvas.height = 200;
-      ctx.fillStyle = '#eee'; ctx.fillRect(0,0,200,200);
-      ctx.fillStyle = '#333'; ctx.fillText('ST:'+st, 10, 100);
-      link.remove(); // tidak ada PNG
-      console.warn('QRCode library belum siap.');
-    }
+    // Render QR ke <canvas> / <img> otomatis
+    const q = new QRCode(holder, {
+      text: 'ST:'+st,
+      width: 200,
+      height: 200,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+
+    // Setelah dirender, siapkan tombol PNG
+    // (qrcodejs bisa output <canvas> atau <img> — tangkap keduanya)
+    setTimeout(()=>{
+      const cvs = holder.querySelector('canvas');
+      const img = holder.querySelector('img');
+      let url = '';
+      if (cvs && cvs.toDataURL) url = cvs.toDataURL('image/png');
+      else if (img && img.src)  url = img.src;
+      if (url){
+        link.href = url;
+        link.download = `ST-${st}.png`;
+      } else {
+        link.remove(); // fallback: tidak ada PNG
+      }
+    }, 50);
   });
 
   const dlg = document.getElementById('dlgStationQR');
   if (dlg && dlg.showModal) dlg.showModal();
 }
+
 
 /* ===== Scan flow (toggle berdasarkan STATION_RULES) ===== */
 function startScanFor(po_id){
