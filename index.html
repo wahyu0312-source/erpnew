@@ -3,11 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>生産ミニERP</title>
+  <title>ERP</title>
   <link rel="icon" href="assets/logo.png">
   <link rel="stylesheet" href="style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <!-- QR generator (stabil) -->
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script defer src="app.js"></script>
 </head>
@@ -15,7 +16,7 @@
   <nav class="nav">
     <div class="nav-left">
       <img src="assets/logo.png" class="logo" alt="">
-      <span class="brand">生産ミニERP</span>
+      <span class="brand">ERP</span>
     </div>
     <div class="nav-right">
       <button id="btnToDash" class="btn ghost hidden">ダッシュボード</button>
@@ -64,6 +65,30 @@
 
   <!-- ダッシュボード -->
   <main id="pageDash" class="container hidden">
+    <!-- 1) オーダー一覧 di paling atas -->
+    <section class="card" id="ordersSection">
+      <header class="row-between">
+        <h3>オーダー一覧</h3>
+        <div class="row gap">
+          <input id="searchQ" placeholder="検索..." class="input">
+          <button class="btn ghost" id="btnExportOrders">注文CSV</button>
+          <button class="btn ghost" id="btnExportShip">本日出荷CSV</button>
+        </div>
+      </header>
+      <div class="table-wrap" style="max-height:55vh">
+        <table class="table s">
+          <thead>
+            <tr>
+              <th>PO</th><th>得意先</th><th>製番号</th><th>品名</th><th>品番</th><th>図番</th>
+              <th>状態</th><th>工程</th><th>更新日時</th><th>更新者</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tbOrders"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 2) Ringkasan -->
     <section class="card">
       <header class="row-between">
         <h3>ダッシュボード</h3>
@@ -89,33 +114,12 @@
       </div>
     </section>
 
+    <!-- 3) チャート -->
     <section class="card">
       <h3>チャート</h3>
       <canvas id="chartMonthly" height="160"></canvas><hr>
       <canvas id="chartCustomer" height="160"></canvas><hr>
       <canvas id="chartStock" height="160"></canvas>
-    </section>
-
-    <section class="card">
-      <header class="row-between">
-        <h3>オーダー一覧</h3>
-        <div class="row gap">
-          <input id="searchQ" placeholder="検索..." class="input">
-          <button class="btn ghost" id="btnExportOrders">注文CSV</button>
-          <button class="btn ghost" id="btnExportShip">本日出荷CSV</button>
-        </div>
-      </header>
-      <div class="table-wrap">
-        <table class="table s">
-          <thead>
-            <tr>
-              <th>PO</th><th>得意先</th><th>製番号</th><th>品名</th><th>品番</th><th>図番</th>
-              <th>状態</th><th>工程</th><th>更新日時</th><th>更新者</th><th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="tbOrders"></tbody>
-        </table>
-      </div>
     </section>
   </main>
 
@@ -124,13 +128,13 @@
     <section class="card">
       <header class="row-between">
         <h3>生産計画（生産現品票）</h3>
-        <div class="row gap">
-          <button class="btn ghost" onclick="window.print()">印刷</button>
-          <button class="btn ghost" id="btnPlanExport">エクスポート</button>
-          <button class="btn ghost" id="btnPlanEdit">編集</button>
-          <button class="btn primary" id="btnCreateOrder">保存（新規/編集保存）</button>
-          <button class="btn" id="btnPlanDelete">削除</button>
-        </div>
+      <div class="row gap">
+        <button class="btn ghost" onclick="window.print()">印刷</button>
+        <button class="btn ghost" id="btnPlanExport">エクスポート</button>
+        <button class="btn ghost" id="btnPlanEdit">編集</button>
+        <button class="btn primary" id="btnCreateOrder">保存（新規/編集保存）</button>
+        <button class="btn" id="btnPlanDelete">削除</button>
+      </div>
       </header>
       <div class="grid">
         <input id="c_po" placeholder="PO（編集用）">
@@ -207,7 +211,7 @@
     <footer class="row-end"><button class="btn" onclick="document.getElementById('dlgHistory').close()">閉じる</button></footer>
   </dialog>
 
-  <!-- 汎用票 -->
+  <!-- 票ダイアログ -->
   <dialog id="dlgTicket" class="paper"><div class="body"></div><footer class="row-end"><button class="btn ghost" onclick="window.print()">印刷</button><button class="btn" onclick="document.getElementById('dlgTicket').close()">閉じる</button></footer></dialog>
   <dialog id="dlgShip" class="paper"><div class="body"></div><footer class="row-end"><button class="btn ghost" onclick="window.print()">印刷</button><button class="btn" onclick="document.getElementById('dlgShip').close()">閉じる</button></footer></dialog>
 </body>
