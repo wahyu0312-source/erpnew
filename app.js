@@ -21,10 +21,19 @@ function qs(obj){ return Object.entries(obj).map(([k,v])=>`${encodeURIComponent(
 async function apiGet(params){
   const url = `${API_BASE}?${qs(params)}`; const r = await fetch(url, {method:'GET'}); const j=await r.json(); if(!j.ok) throw new Error(j.error||'HTTP'); return j.data;
 }
-async function apiPost(action, body={}){
-  const r=await fetch(API_BASE, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action, apiKey:API_KEY, ...body})});
-  const j=await r.json(); if(!j.ok) throw new Error(j.error||'HTTP'); return j.data;
+-async function apiPost(action, body={}){
+-  const r=await fetch(API_BASE, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action, apiKey:API_KEY, ...body})});
++async function apiPost(action, body={}){
++  // Gunakan text/plain supaya tidak ada preflight OPTIONS (CORS safe)
++  const r=await fetch(API_BASE, {
++    method:'POST',
++    headers:{ 'Content-Type':'text/plain;charset=utf-8' },
++    body: JSON.stringify({action, apiKey:API_KEY, ...body}),
++    redirect:'follow',
++  });
+   const j=await r.json(); if(!j.ok) throw new Error(j.error||'HTTP'); return j.data;
 }
+
 
 /* ====== State ====== */
 let SESSION=null, CURRENT_PO=null, scanStream=null, scanTimer=null;
