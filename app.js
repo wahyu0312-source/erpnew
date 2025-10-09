@@ -1,243 +1,192 @@
-/* ========= util ========= */
-const API_BASE = ScriptApp ? '' : ''; // dibiarkan, dipanggil via google.script.run di WebApp Apps Script, atau fetch ke doGet/doPost published URL
-const $ = (s)=>document.querySelector(s);
-const $$ = (s)=>document.querySelectorAll(s);
-const toA = (x)=>Array.from(x||[]);
-function jfetch(url, opt) { return fetch(url, opt).then(r=>r.json()); }
+/* =========================================================
+ * app.js — Tokyo Seimitsu ERP (Frontend, revised)
+ * - 全ラベルの「SO」を「注番」に統一（内部カラムは変更なし）
+ * - 生産現品票/出荷予定/営業のCSV入力仕様に対応
+ * - スキャン/手動工程変更：OK品・不良品の必須入力、レザー加工、検査中/検査済
+ * - 不良品チャート
+ * ========================================================= */
 
-/* ========= state ========= */
-let SESSION = null; // {username, department, role}
+const API_BASE = "https://script.google.com/macros/s/AKfycbwU5weHTlKMx7cztUIs060C9nCrQlQHCiGj3qvOzDdRFNgrAc9FO6nhqkin42nEq3df/exec"; // ← Apps Script のデプロイURLに置換
+const API_KEY = "";  // 必要なら
 
-/* ========= auth ========= */
-async function apiPost(body){
-  const url = `${google.script ? '' : ''}`; // dipanggil via google.script.run jika Apps Script HTMLService; untuk HTML statik pakai WebApp URL
-  // Di Apps Script HTMLService: gunakan google.script.run
-  return new Promise((resolve,reject)=>{
-    google.script.run
-      .withSuccessHandler(resolve)
-      .withFailureHandler(err=>reject(err))
-      .doPost(JSON.stringify(body)); // server side wrapper doPostHtml harus ada pada deploy (opsional)
-  });
-}
+/* ====== 工程マスター（UI表示用） ====== */
+const PROCESSES = ["切断","曲げ","レザー加工","組立","検査中","検査済","出荷"];
 
-/* ====== LOGIN demo (pakai GET agar mudah dari WebApp URL) ====== */
-$('#btnLogin')?.addEventListener('click', async ()=>{
-  const username = $('#inUser').value.trim();
-  const password = $('#inPass').value.trim();
-  try{
-    const res = await jfetch(`?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`, {method:'GET'});
-    if(!res.ok) throw new Error(res.error||'Login error');
-    SESSION = res.data;
-    document.getElementById('authView').classList.add('hidden');
-    document.getElementById('pageDash').classList.remove('hidden');
-    initNav();
-    loadDashboard();
-  }catch(e){
-    alert('ログイン失敗: '+e.message);
+/* ====== View 切替 ====== */
+const views = [...document.querySelectorAll('.view')];
+const navBtns = [...document.querySelectorAll('.nav button[data-nav]')];
+navBtns.forEach(btn=>btn.addEventListener('click',()=>{
+  navBtns.forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const id = 'view-'+btn.dataset.nav;
+  views.forEach(v=>v.classList.toggle('show', v.id===id));
+}));
+
+document.getElementById('logout').onclick = () => localStorage.clear();
+
+/* ====== Helper ====== */
+const fetchJSON = (url, opt={}) =>
+  fetch(url, {
+    ...opt,
+    headers: {'Content-Type':'application/json','X-API-KEY':API_KEY, ...(opt.headers||{})}
+  }).then(r=>r.json());
+
+const qs = s => document.querySelector(s);
+
+/* ====== 生産現品票：CSV/Excel 取込、登録 ====== */
+const gpMap = {
+  '生産開始':'start_date','得意先':'customer','図番':'drawing','機種':'model',
+  '商品名':'item_name','数量':'qty','注番':'order_no','備考':'note'
+};
+function parseSheet(file, cb){
+  const ext = file.name.toLowerCase().split('.').pop();
+  if(ext==='csv'){
+    const fr = new FileReader();
+    fr.onload = e => {
+      const rows = e.target.result.split(/\r?\n/).filter(Boolean).map(l=>l.split(','));
+      cb(rows);
+    };
+    fr.readAsText(file);
+  }else{
+    const fr = new FileReader();
+    fr.onload = e => {
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      cb(rows);
+    };
+    fr.readAsArrayBuffer(file);
   }
-});
-
-/* ========= NAV ========= */
-function initNav(){
-  $('#btnToDash')?.classList.remove('hidden');
-  $('#btnToPlan')?.classList.remove('hidden');
-  $('#btnToShip')?.classList.remove('hidden');
-  $('#btnToCharts')?.classList.remove('hidden');
-
-  $('#btnToDash')?.addEventListener('click', ()=>showPage('pageDash'));
-  $('#btnToPlan')?.addEventListener('click', ()=>showPage('pagePlan'));
-  $('#btnToShip')?.addEventListener('click', ()=>showPage('pageShip'));
-  $('#btnToCharts')?.addEventListener('click', ()=>{ showPage('pageCharts'); renderDefectChart(); });
-}
-function showPage(id){
-  ['authView','pageDash','pagePlan','pageShip','pageCharts'].forEach(pid=>{
-    const el=document.getElementById(pid); if(!el) return;
-    if(pid===id) el.classList.remove('hidden'); else el.classList.add('hidden');
-  });
 }
 
-/* ========= DASHBOARD ========= */
-async function loadDashboard(){
-  try{
-    const [ordersRes, stockRes, snapRes] = await Promise.all([
-      jfetch(`?action=listOrders`),
-      jfetch(`?action=stock`),
-      jfetch(`?action=locSnapshot`)
-    ]);
-    if(!ordersRes.ok) throw new Error(ordersRes.error);
-    if(!stockRes.ok) throw new Error(stockRes.error);
-    if(!snapRes.ok) throw new Error(snapRes.error);
-
-    renderOrders(ordersRes.data||[]);
-    $('#statFinished').textContent = stockRes.data?.finishedStock ?? '-';
-    $('#statReady').textContent = stockRes.data?.ready ?? '-';
-    $('#statShipped').textContent = stockRes.data?.shipped ?? '-';
-
-    // grid proses (snapshot)
-    const map = snapRes.data||{};
-    const el = $('#gridProc'); el.innerHTML='';
-    Object.keys(map).forEach(k=>{
-      const div=document.createElement('div');
-      div.className='grid-chip';
-      div.innerHTML = `<span class="h">${k||'—'}</span><span>${map[k]}</span>`;
-      el.appendChild(div);
+qs('#btn-genpin-upload').onclick = () => {
+  const f = qs('#imp-genpin').files[0];
+  if(!f) return alert('ファイルを選択してください。');
+  parseSheet(f, rows=>{
+    const header = rows[0];
+    const body = rows.slice(1).filter(r=>r.some(c=>String(c).trim()!==""));
+    const mapped = body.map(r=>{
+      const o = {};
+      header.forEach((h,i)=>{
+        const key = gpMap[h];
+        if(key) o[key] = r[i];
+      });
+      return o;
     });
-  }catch(e){ console.error(e); }
-}
-function renderOrders(rows){
-  const tb = $('#tbOrders'); tb.innerHTML='';
-  rows.forEach(r=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML = `
-      <td><div class="row-main"><b>${r.po_id||''}</b><div class="row-sub"><span class="kv">得意先: <b>${r['得意先']||''}</b></span></div></div></td>
-      <td>${r['品名']||''}</td>
-      <td>${r['品番']||''}</td>
-      <td>${r['図番']||''}</td>
-      <td>${r['数量']||0}</td>
-      <td class="col-status">${r.status||''}</td>
-      <td class="col-proc"><span class="badge">${r.current_process||''}</span></td>
-      <td>${r.updated_at||''}</td>
-      <td>${r.updated_by||''}</td>
-      <td><button class="btn ghost s" data-po="${r.po_id}"><i class="fa-solid fa-qrcode"></i> スキャン</button></td>
-    `;
-    tb.appendChild(tr);
+    fetchJSON(API_BASE+'?route=importGenpin', {method:'POST', body:JSON.stringify(mapped)})
+      .then(res=>alert(res.message||'取込完了'));
   });
-  // bind scan dialog open
-  tb.querySelectorAll('button[data-po]')?.forEach(btn=>{
-    btn.addEventListener('click', ()=> openScanDialog(btn.getAttribute('data-po')));
-  });
-}
-
-/* ========= PLAN (生産現品票) ========= */
-$('#btnPlanImport')?.addEventListener('click', ()=> $('#filePlan').click());
-$('#filePlan')?.addEventListener('change', async (e)=>{
-  const f = e.target.files?.[0]; if(!f) return;
-  const buf = await f.arrayBuffer();
-  const wb = XLSX.read(buf);
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
-  const required = ['出荷日','得意先','図番','機種','商品名','数量','注番','備考'];
-  const head = Object.keys(rows[0]||{});
-  const ok = required.every(h=> head.includes(h));
-  if(!ok){ alert('ヘッダ不一致です。必要ヘッダ: '+required.join('、')); return; }
-  // isi form dari baris pertama
-  const r = rows[0];
-  $('#p_shipdate').value = (r['出荷日']||'').slice(0,10).replace(/\./g,'-');
-  $('#p_tokui').value = r['得意先']||'';
-  $('#p_zuban').value = r['図番']||'';
-  $('#p_kishu').value = r['機種']||'';
-  $('#p_shohin').value = r['商品名']||'';
-  $('#p_qty').value = r['数量']||'';
-  $('#p_chuban').value = r['注番']||'';
-  $('#p_biko').value = r['備考']||'';
-  alert(`生産現品票：${rows.length} 行を読み込みました（先頭行をフォームに反映）。`);
-});
-$('#btnCreateOrder')?.addEventListener('click', async ()=>{
+};
+qs('#btn-genpin-add').onclick = () => {
   const payload = {
-    '注番': $('#p_chuban').value.trim(),
-    '得意先': $('#p_tokui').value.trim(),
-    '図番': $('#p_zuban').value.trim(),
-    '機種': $('#p_kishu').value.trim(),
-    '商品名': $('#p_shohin').value.trim(),
-    '数量': Number($('#p_qty').value||0),
-    '備考': $('#p_biko').value.trim(),
-    '出荷日': $('#p_shipdate').value||'',
-    ok_qty: Number($('#p_ok').value||0),
-    ng_qty: Number($('#p_ng').value||0),
-    status: '生産開始',
-    current_process: 'レザー加工'
+    start_date: qs('#gp-start').value,
+    customer: qs('#gp-cust').value,
+    drawing: qs('#gp-zu').value,
+    model: qs('#gp-kishu').value,
+    item_name: qs('#gp-shohin').value,
+    qty: Number(qs('#gp-qty').value||0),
+    order_no: qs('#gp-chuban').value,
+    note: qs('#gp-biko').value
   };
-  if((payload.ok_qty+payload.ng_qty) <= 0){ alert('OK品 または 不良品の数量を入力してください。'); return; }
+  fetchJSON(API_BASE+'?route=addGenpin',{method:'POST',body:JSON.stringify(payload)})
+    .then(res=>alert(res.message||'登録しました'));
+};
 
-  try{
-    const res = await jfetch(``, {method:'POST', body: JSON.stringify({action:'createOrder', payload, user:SESSION})});
-  }catch{ /* jika fetch tidak dipakai, abaikan */ }
-
-  // fallback (GET) untuk Apps Script WebApp:
-  const qs = new URLSearchParams({action:'createOrder', payload: JSON.stringify(payload), user: JSON.stringify(SESSION)});
-  const r = await jfetch(`?${qs.toString()}`, {method:'GET'});
-  if(!r.ok) { alert('保存失敗: '+(r.error||'')); return; }
-  alert('保存しました（注番: '+(r.data?.po_id||payload['注番'])+'）');
-  loadDashboard();
-});
-
-/* ========= SHIP (出荷予定) ========= */
-$('#btnShipImport')?.addEventListener('click', ()=> $('#fileShip').click());
-$('#fileShip')?.addEventListener('change', async (e)=>{
-  const f = e.target.files?.[0]; if(!f) return;
-  const buf = await f.arrayBuffer();
-  const wb = XLSX.read(buf);
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval:''});
-  const required = ['得意先','図番','機種','商品名','数量','送り先','注番','備考'];
-  const head = Object.keys(rows[0]||{});
-  const ok = required.every(h=> head.includes(h));
-  if(!ok){ alert('ヘッダ不一致: '+required.join('、')); return; }
-  const r = rows[0];
-  $('#s_tokui').value=r['得意先']||''; $('#s_zuban').value=r['図番']||''; $('#s_kishu').value=r['機種']||'';
-  $('#s_shohin').value=r['商品名']||''; $('#s_qty2').value=r['数量']||''; $('#s_okurisaki').value=r['送り先']||'';
-  $('#s_chuban').value=r['注番']||''; $('#s_biko').value=r['備考']||'';
-  alert(`出荷予定：${rows.length} 行を読み込みました（先頭行をフォームに反映）。`);
-});
-$('#btnSchedule')?.addEventListener('click', async ()=>{
-  const po_id = $('#s_chuban').value.trim(); // 注番
-  if(!po_id){ alert('注番を入力してください'); return; }
-  const extra = {
-    '得意先': $('#s_tokui').value.trim(),
-    '図番': $('#s_zuban').value.trim(),
-    '機種': $('#s_kishu').value.trim(),
-    '商品名': $('#s_shohin').value.trim(),
-    '送り先': $('#s_okurisaki').value.trim(),
-    '注番': po_id,
-    '備考': $('#s_biko').value.trim()
-  };
-  const qty = Number($('#s_qty2').value||0);
-  const dateIso = new Date().toISOString().slice(0,10);
-  const qs = new URLSearchParams({action:'scheduleShipment', po_id, dateIso, qty, user: JSON.stringify(SESSION), extra: JSON.stringify(extra)});
-  const r = await jfetch(`?${qs.toString()}`, {method:'GET'});
-  if(!r.ok){ alert('保存失敗: '+(r.error||'')); return; }
-  alert('出荷予定を保存しました（ID: '+(r.data?.ship_id||'')+'）');
-  loadDashboard();
-});
-
-/* ========= SCAN (OK/NG wajib) ========= */
-function openScanDialog(po){
-  const ok = prompt(`注番: ${po}\nOK品 数量を入力してください`, '0');
-  if(ok===null) return;
-  const ng = prompt('不良品 数量を入力してください', '0');
-  if(ng===null) return;
-  const proc = prompt('工程（ST:xxx または 工程名）を入力してください', '検査中')||'検査中';
-
-  const payload = { po_id:po, process:proc, ok_qty:Number(ok||0), ng_qty:Number(ng||0) };
-  commitScan(payload);
-}
-async function commitScan(payload){
-  const qs = new URLSearchParams({action:'setProcess', payload: JSON.stringify(payload), user: JSON.stringify(SESSION)});
-  const r = await jfetch(`?${qs.toString()}`, {method:'GET'});
-  if(!r.ok){ alert('登録失敗: '+(r.error||'')); return; }
-  alert('登録しました');
-  loadDashboard();
-}
-
-/* ========= Defect Chart (工程別 不良品) ========= */
-let chDefect=null;
-async function renderDefectChart(){
-  try{
-    const r = await jfetch(`?action=defectsByProcess`);
-    const arr = r.ok ? (r.data||[]) : [];
-    const labels = arr.length? arr.map(x=>x.process) : ['データなし'];
-    const data = arr.length? arr.map(x=>x.ng) : [0];
-    const ctx = document.getElementById('chDefectProc').getContext('2d');
-    if(chDefect) chDefect.destroy();
-    chDefect = new Chart(ctx, {
-      type:'bar',
-      data:{ labels, datasets:[{ label:'不良品 数量', data }]},
-      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} }
+/* ====== 出荷予定：CSV/Excel 取込、登録 ====== */
+const ytMap = {
+  '出荷日':'ship_date','得意先':'customer','図番':'drawing','機種':'model',
+  '商品名':'item_name','数量':'qty','送り先':'dest','注番':'order_no','備考':'note'
+};
+qs('#btn-yotei-upload').onclick = () => {
+  const f = qs('#imp-yotei').files[0];
+  if(!f) return alert('ファイルを選択してください。');
+  parseSheet(f, rows=>{
+    const header = rows[0];
+    const body = rows.slice(1).filter(r=>r.some(c=>String(c).trim()!==""));
+    const mapped = body.map(r=>{
+      const o = {};
+      header.forEach((h,i)=>{
+        const key = ytMap[h];
+        if(key) o[key] = r[i];
+      });
+      return o;
     });
-  }catch(e){
-    console.warn('defect chart err', e);
-  }
-}
+    fetchJSON(API_BASE+'?route=importYotei', {method:'POST', body:JSON.stringify(mapped)})
+      .then(res=>alert(res.message||'取込完了'));
+  });
+};
+qs('#btn-yotei-add').onclick = () => {
+  const payload = {
+    ship_date: qs('#yt-date').value,
+    customer: qs('#yt-cust').value,
+    drawing: qs('#yt-zu').value,
+    model: qs('#yt-kishu').value,
+    item_name: qs('#yt-shohin').value,
+    qty: Number(qs('#yt-qty').value||0),
+    dest: qs('#yt-okuri').value,
+    order_no: qs('#yt-chuban').value,
+    note: qs('#yt-biko').value
+  };
+  fetchJSON(API_BASE+'?route=addYotei',{method:'POST',body:JSON.stringify(payload)})
+    .then(res=>alert(res.message||'登録しました'));
+};
 
-/* ========= initial ========= */
-document.addEventListener('DOMContentLoaded', ()=>{
-  // tunjukkan login lebih dulu
-});
+/* ====== 営業（入力のみ、旧スキーマへマッピング） ====== */
+const slMap = {
+  '注番':'order_no','機種':'model','商品名':'item_name','図番':'drawing',
+  '数量':'qty','得意先':'customer','受注日':'order_date','希望納期':'due_date','備考':'note'
+};
+qs('#btn-sales-add').onclick = () => {
+  const payload = {
+    order_no: qs('#sl-chuban').value, model: qs('#sl-kishu').value, item_name: qs('#sl-shohin').value,
+    drawing: qs('#sl-zu').value, qty: Number(qs('#sl-qty').value||0), customer: qs('#sl-cust').value,
+    order_date: qs('#sl-rec').value, due_date: qs('#sl-due').value, note: qs('#sl-biko').value
+  };
+  fetchJSON(API_BASE+'?route=addSales',{method:'POST',body:JSON.stringify(payload)})
+    .then(res=>alert(res.message||'登録しました'));
+};
+
+/* ====== スキャン/手動工程変更 + OK/不良 ====== */
+qs('#btn-set-process').onclick = () => {
+  const payload = {
+    order_no: qs('#sc-chuban').value.trim(),
+    process: qs('#sc-process').value,
+    status: qs('#sc-status').value.trim(),
+    ok_qty: Number(qs('#sc-ok').value||0),
+    ng_qty: Number(qs('#sc-ng').value||0)
+  };
+  if(!payload.order_no) return alert('注番を入力してください。');
+  fetchJSON(API_BASE+'?route=setProcess', {method:'POST', body:JSON.stringify(payload)})
+    .then(res=>alert(res.message||'反映しました'));
+};
+
+/* ====== ダッシュボード（スナップショット & 不良チャート） ====== */
+function loadDashboard(){
+  fetchJSON(API_BASE+'?route=snapshot').then(data=>{
+    qs('#kpi-orders').textContent = data.orders||0;
+    qs('#kpi-done').textContent = data.done||0;
+    qs('#kpi-ok').textContent = data.ok||0;
+    qs('#kpi-ng').textContent = data.ng||0;
+
+    // defectByProcess (小カード)
+    const ctx1 = document.getElementById('defectByProcess');
+    if(ctx1){
+      new Chart(ctx1, {
+        type:'bar',
+        data:{labels:data.defects.labels, datasets:[{label:'不良（個）', data:data.defects.values}]},
+        options:{responsive:true, scales:{y:{beginAtZero:true}}}
+      });
+    }
+  });
+
+  fetchJSON(API_BASE+'?route=defectsByProcess').then(d=>{
+    const ctx = document.getElementById('chart-defect');
+    if(!ctx) return;
+    new Chart(ctx, {
+      type:'bar',
+      data:{labels:d.labels, datasets:[{label:'不良（個）', data:d.values}]},
+      options:{responsive:true, scales:{y:{beginAtZero:true}}}
+    });
+  });
+}
+document.addEventListener('DOMContentLoaded', loadDashboard);
