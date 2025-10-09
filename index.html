@@ -6,22 +6,22 @@
   <title>東京精密発條株式会社システム</title>
   <link rel="icon" href="assets/tsh.png">
 
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkfQ+DaZr7ePOYtWGbS6cXWf5Mrdk5lFZ9QXJd2r5PH8WPe9XgYj2RF6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-  <!-- Styles -->
+  <!-- Font Awesome (tanpa integrity agar tidak diblok Edge/CDN mismatch) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+  <!-- App styles -->
   <link rel="stylesheet" href="style.css">
 
-  <!-- Charts & QR -->
+  <!-- Libs -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <!-- SheetJS for Excel parsing -->
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
   <!-- App -->
   <script defer src="app.js"></script>
 
-  <!-- Weather pill styling (tetap) -->
+  <!-- (Opsional) styling kecil untuk weather pill -->
   <style>
     .wx-pill{display:inline-flex;align-items:center;gap:.6rem;padding:.5rem .8rem;border-radius:999px;border:1px solid rgba(0,0,0,.08);background:linear-gradient(180deg,#ffffff 0%, #f8fafc 100%);color:#0f172a; box-shadow:0 6px 18px rgba(2,6,23,.08), inset 0 1px 0 #fff;min-height:40px; max-width:60vw;}
     .wx-city{font-size:.9rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -32,133 +32,146 @@
   </style>
 </head>
 <body>
-  <!-- NAV (tidak berubah selain cuaca) -->
+  <!-- NAV -->
   <nav class="nav">
     <div class="nav-left">
       <img src="assets/tsh.png" class="logo" alt="">
       <span class="brand">東京精密発條株式会社システム</span>
     </div>
-
-    <div id="weather" class="wx-pill" aria-live="polite" title="現在の天気">
+    <div id="weather" class="wx-pill" title="現在の天気">
       <span id="wxCity" class="wx-city">取得中…</span>
-      <span class="wx-dot" aria-hidden="true"></span>
-      <span id="wxIcon" class="wx-ico" aria-hidden="true"></span>
+      <span class="wx-dot"></span>
+      <span id="wxIcon" class="wx-ico"></span>
       <span id="wxTemp" class="wx-temp">--℃</span>
     </div>
-
     <div class="nav-right">
       <button id="btnToDash" class="btn ghost hidden"><i class="fa-solid fa-gauge"></i> ダッシュボード</button>
-      <button id="btnToSales" class="btn ghost hidden"><i class="fa-regular fa-handshake"></i> 受注（営業）</button>
-      <button id="btnToPlan" class="btn ghost hidden"><i class="fa-solid fa-list-check"></i> 生産計画</button>
+      <button id="btnToPlan" class="btn ghost hidden"><i class="fa-solid fa-list-check"></i> 生産現品票</button>
       <button id="btnToShip" class="btn ghost hidden"><i class="fa-solid fa-truck"></i> 出荷予定</button>
-      <button id="btnToInvPage" class="btn ghost hidden"><i class="fa-solid fa-boxes-stacked"></i> 在庫</button>
-      <button id="btnToFinPage" class="btn ghost hidden"><i class="fa-regular fa-square-check"></i> 完成品一覧</button>
-      <button id="btnToInvoice" class="btn ghost hidden"><i class="fa-regular fa-file-lines"></i> 請求書</button>
       <button id="btnToCharts" class="btn ghost hidden"><i class="fa-solid fa-chart-simple"></i> 統計</button>
-
-      <details class="dropdown-inline hidden" id="ddSetting">
-        <summary class="btn ghost"><i class="fa-solid fa-gear"></i> 設定 <i class="fa-solid fa-caret-down caret" style="margin-left:.25rem"></i></summary>
-        <div class="menu right">
-          <button id="miStationQR" class="menu-item"><i class="fa-solid fa-qrcode"></i> 工程QR</button>
-          <button id="miAddUser" class="menu-item"><i class="fa-solid fa-user-plus"></i> ユーザー追加</button>
-          <button id="miChangePass" class="menu-item"><i class="fa-solid fa-key"></i> パス変更</button>
-          <hr style="border:none;border-top:1px solid var(--border);margin:.35rem 0">
-          <button id="btnLogout" class="menu-item"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
-        </div>
-      </details>
+      <button id="btnLogout" class="btn ghost hidden"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
       <span id="userInfo" class="muted"></span>
     </div>
   </nav>
 
-  <a class="corner-brand" href="#" aria-label="Design credit">Design by Wahyu</a>
-
-  <!-- AUTH (tetap) -->
-  <main id="authView" class="container"> ... </main>
-
-  <!-- DASHBOARD (tetap) -->
-  <main id="pageDash" class="container hidden"> ... </main>
-
-  <!-- SALES (tetap — header SO masih sesuai file asli) -->
-  <main id="pageSales" class="container hidden"> ... </main>
-
-  <!-- PLAN (tetap) -->
-  <main id="pagePlan" class="container hidden"> ... </main>
-
-  <!-- SHIP (tetap) -->
-  <main id="pageShip" class="container hidden"> ... </main>
-
-  <!-- INVENTORY / FINISHED / INVOICE (tetap) -->
-  <main id="pageInventory" class="container hidden"> ... </main>
-  <main id="pageFinished" class="container hidden"> ... </main>
-  <main id="pageInvoice" class="container hidden"> ... </main>
-
-  <!-- 統計 (Charts) — DITAMBAH kanvas baru untuk 不良品（工程別） -->
-  <main id="pageCharts" class="container hidden">
-    <section class="card">
-      <header class="row-between">
-        <h3><i class="fa-solid fa-chart-simple"></i> 統計</h3>
-        <div class="row gap">
-          <select id="chartYear" class="input" style="width:120px"></select>
-          <button id="btnChartsRefresh" class="btn ghost"><i class="fa-solid fa-rotate"></i> 更新</button>
-        </div>
-      </header>
-
-      <div class="grid-3">
-        <div class="tile"><div class="muted s">月別出荷数量</div><div style="height:220px"><canvas id="chMonthly"></canvas></div></div>
-        <div class="tile"><div class="muted s">得意先別出荷</div><div style="height:220px"><canvas id="chCustomer"></canvas></div></div>
-        <div class="tile"><div class="muted s">在庫区分</div><div style="height:220px"><canvas id="chStock"></canvas></div></div>
-      </div>
-
-      <div class="grid-3" style="margin-top:1rem">
-        <div class="tile"><div class="muted s">工程内WIP</div><div style="height:220px"><canvas id="chWipProc"></canvas></div></div>
-        <div class="tile"><div class="muted s">営業 受注数</div><div style="height:220px"><canvas id="chSales"></canvas></div></div>
-        <div class="tile"><div class="muted s">生産計画 作成数</div><div style="height:220px"><canvas id="chPlan"></canvas></div></div>
-      </div>
-
-      <!-- === NEW: 不良品（工程別） === -->
-      <div class="grid-3" style="margin-top:1rem">
-        <div class="tile">
-          <div class="muted s">不良品（工程別）</div>
-          <div style="height:220px"><canvas id="chDefectByProc"></canvas></div>
-        </div>
+  <!-- LOGIN -->
+  <main id="authView" class="container">
+    <section class="card" style="max-width:520px;margin:2rem auto">
+      <header><h3><i class="fa-solid fa-right-to-bracket"></i> ログイン</h3></header>
+      <div class="grid">
+        <input id="inUser" placeholder="ユーザーID">
+        <input id="inPass" placeholder="パスワード" type="password">
+        <label class="row-start"><input id="inRemember" type="checkbox"> <span>ログイン状態を保持</span></label>
+        <button id="btnLogin" class="btn primary">ログイン</button>
       </div>
     </section>
   </main>
 
-  <!-- Dialogs -->
-  <dialog id="dlgStationQR" class="paper"> ... </dialog>
+  <!-- DASHBOARD -->
+  <main id="pageDash" class="container hidden">
+    <header class="row-between">
+      <h2><i class="fa-solid fa-gauge"></i> 生産ダッシュボード</h2>
+      <div class="row gap">
+        <button id="btnOpenScan" class="btn"><i class="fa-solid fa-qrcode"></i> スキャン</button>
+      </div>
+    </header>
 
-  <!-- DITAMBAH: input OK/NG di dialog scan -->
+    <section class="grid-2">
+      <div class="tile">
+        <div class="muted s">当日スナップショット</div>
+        <div class="row-around big">
+          <div><strong id="ssTickets">0</strong><div class="muted s">現品票（件）</div></div>
+          <div><strong id="ssDone">0</strong><div class="muted s">完了（件）</div></div>
+          <div><strong id="ssOk">0</strong><div class="muted s">OK品（個）</div></div>
+          <div><strong id="ssNg">0</strong><div class="muted s">不良品（個）</div></div>
+        </div>
+      </div>
+      <div class="tile">
+        <div class="muted s">工程別 不良品</div>
+        <div style="height:240px"><canvas id="chDefectByProc"></canvas></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 生産現品票（入力 cepat minimal untuk demo） -->
+  <main id="pagePlan" class="container hidden">
+    <header><h3><i class="fa-solid fa-list-check"></i> 生産現品票</h3></header>
+    <section class="card">
+      <div class="grid">
+        <input id="c_po" placeholder="注番（編集用）">
+        <input id="c_tokui" placeholder="得意先">
+        <input id="c_zuban" placeholder="図番">
+        <input id="c_kishu" placeholder="機種（=品番）">
+        <input id="c_hinmei" placeholder="商品名（=品名）">
+        <input id="c_qty" type="number" min="0" placeholder="数量">
+        <input id="c_biko" placeholder="備考">
+        <button id="btnCreateOrder" class="btn">登録/更新</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <header class="row-between">
+        <h4>現品票一覧</h4>
+        <input id="qOrders" class="input" placeholder="検索…">
+      </header>
+      <div id="tblOrders" class="table"></div>
+    </section>
+  </main>
+
+  <!-- 出荷予定（minimal） -->
+  <main id="pageShip" class="container hidden">
+    <header><h3><i class="fa-solid fa-truck"></i> 出荷予定</h3></header>
+    <section class="card">
+      <div class="grid">
+        <input id="s_po" placeholder="注番">
+        <input id="s_date" type="date" placeholder="出荷日">
+        <input id="s_qty"  type="number" min="0" placeholder="数量">
+        <input id="s_dest" placeholder="送り先">
+        <input id="s_cust" placeholder="得意先">
+        <input id="s_note" placeholder="備考">
+        <button id="btnSchedule" class="btn">登録</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- 統計 -->
+  <main id="pageCharts" class="container hidden">
+    <section class="card">
+      <header class="row-between">
+        <h3><i class="fa-solid fa-chart-simple"></i> 統計</h3>
+        <button id="btnChartsRefresh" class="btn ghost"><i class="fa-solid fa-rotate"></i> 更新</button>
+      </header>
+      <div class="grid-3">
+        <div class="tile"><div class="muted s">工程内WIP</div><div style="height:220px"><canvas id="chWipProc"></canvas></div></div>
+        <div class="tile"><div class="muted s">営業 受注数</div><div style="height:220px"><canvas id="chSales"></canvas></div></div>
+        <div class="tile"><div class="muted s">生産計画 作成数</div><div style="height:220px"><canvas id="chPlan"></canvas></div></div>
+      </div>
+      <div class="grid-3" style="margin-top:1rem">
+        <div class="tile"><div class="muted s">不良品（工程別）</div><div style="height:220px"><canvas id="chDefects"></canvas></div></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Dialog: Scan QR + OK/NG -->
   <dialog id="dlgScan" class="paper">
     <div class="body">
       <h3>QRスキャン更新（PO: <span id="scanPO"></span>）</h3>
-      <p class="muted s">工程QRを読み取ると切替され履歴に記録されます。</p>
       <video id="scanVideo" playsinline></video>
       <canvas id="scanCanvas" class="hidden"></canvas>
-
-      <!-- NEW small form: OK/NG + Note -->
       <div class="grid" style="margin-top:.5rem">
         <input id="inOkQty" type="number" min="0" placeholder="OK品 数量">
         <input id="inNgQty" type="number" min="0" placeholder="不良品 数量">
         <input id="inNote" placeholder="メモ/備考（任意）">
       </div>
-
       <div id="scanResult" class="muted s" style="margin-top:.5rem"></div>
     </div>
     <footer class="row-end">
-      <button class="btn ghost" id="btnScanStart">開始</button>
-      <button class="btn" id="btnScanClose">閉じる</button>
+      <button id="btnScanStart" class="btn ghost">開始</button>
+      <button id="btnScanClose" class="btn">閉じる</button>
     </footer>
   </dialog>
 
-  <dialog id="dlgHistory" class="paper"> ... </dialog>
-  <dialog id="dlgTicket" class="paper"> ... </dialog>
-  <dialog id="dlgShip" class="paper"> ... </dialog>
+  <!-- Dialog kecil: Ticket detail (opsional, bisa diisi nanti) -->
 
-  <!-- Script cuaca (tetap) -->
-  <script> /* ... (weather script dari file asli) ... */ </script>
-
-  <!-- Pengayaan ringan untuk Statistik di file asli (tetap) -->
-  <script> /* ... (helper statistik ringan dari file asli) ... */ </script>
 </body>
 </html>
