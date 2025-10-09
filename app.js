@@ -1,166 +1,124 @@
-/* =========================
- * Frontend minimal patch
- * ========================= */
-const API_BASE = 'https://script.google.com/macros/s/AKfycbwU5weHTlKMx7cztUIs060C9nCrQlQHCiGj3qvOzDdRFNgrAc9FO6nhqkin42nEq3df/exec'; // ← isi dengan URL Web App Apps Script
+/* =========================================================
+ * app.js — Patched
+ * - Scan & manual set process => minta OK/NG, kirim ke setProcess
+ * - Tambah chart: 不良品（工程別） dari d.defectByProcess
+ * ========================================================= */
 
-/* ====== View switch ====== */
-const navBtns = [...document.querySelectorAll('.nav button[data-view]')];
-const views = [...document.querySelectorAll('.view')];
-navBtns.forEach(b=>b.addEventListener('click',()=>{
-  navBtns.forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
-  const id = 'view-'+b.dataset.view;
-  views.forEach(v=>v.classList.toggle('show', v.id===id));
-}));
+/* ===== Config (sama) ===== */
+const API_BASE = "https://script.google.com/macros/s/AKfycbxHxbyea1odDIVDwcU_okEN6KoTfgxvHXjeuixuTAIj-AkwAC-R3GfHZvcpK69Mfdff/exec";
+const API_KEY = "";
 
-/* ====== Helpers ====== */
-const $ = s => document.querySelector(s);
-const fetchJSON = (url, opt={}) => fetch(url,{headers:{'Content-Type':'application/json'},...opt}).then(r=>r.json());
-function parseSheet(file, cb){
-  const ext = file.name.toLowerCase().split('.').pop();
-  if(ext==='csv'){
-    const fr = new FileReader();
-    fr.onload = e => {
-      const rows = e.target.result.split(/\r?\n/).map(l=>l.split(','));
-      cb(rows);
-    };
-    fr.readAsText(file);
-  }else{
-    const fr = new FileReader();
-    fr.onload = e => {
-      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      cb(rows);
-    };
-    fr.readAsArrayBuffer(file);
-  }
-}
-function normalizeProcess(p){
-  if(!p) return '';
-  p = String(p).trim().replace('レーサ加工','レザー加工');
-  if(p==='検査工程') return '検査中';
-  return p;
+/* ===== Proses & rules (sama seperti file asli) ===== */
+const PROCESSES = ['レーザ加工','曲げ加工','外枠組立','シャッター組立','シャッター溶接','コーキング','外枠塗装','組立（組立中）','組立（組立済）','外注','検査工程'];
+const STATION_RULES = {
+  'レーザ加工': (o)=> ({ current_process:'レーザ加工' }),
+  '曲げ工程': (o)=> ({ current_process:'曲げ加工' }),
+  '外枠組立': (o)=> ({ current_process:'外枠組立' }),
+  'シャッター組立': (o)=> ({ current_process:'シャッター組立' }),
+  'シャッター溶接': (o)=> ({ current_process:'シャッター溶接' }),
+  'コーキング': (o)=> ({ current_process:'コーキング' }),
+  '外枠塗装': (o)=> ({ current_process:'外枠塗装' }),
+  '組立工程': (o)=> (o.current_process==='組立（組立中）' ? { current_process:'組立（組立済）' } : { current_process:'組立（組立中）' }),
+  '検査工程': (o)=> (o.current_process==='検査工程' && !['検査保留','不良品（要リペア）','検査済'].includes(o.status) ? { current_process:'検査工程', status:'検査済' } : { current_process:'検査工程' }),
+  '出荷工程': (o)=> (o.status==='出荷準備' ? { current_process:o.current_process||'検査工程', status:'出荷済' } : { current_process:'検査工程', status:'出荷準備' })
+};
+
+/* ===== Map badge (tetap) ===== */
+const STATUS_CLASS = {'生産開始':'st-begin','検査工程':'st-inspect','検査済':'st-inspect','検査保留':'st-hold','出荷準備':'st-ready','出荷済':'st-shipped','不良品（要リペア）':'st-ng'};
+const PROC_CLASS   = {'レーザ加工':'prc-laser','曲げ加工':'prc-bend','外枠組立':'prc-frame','シャッター組立':'prc-shassy','シャッター溶接':'prc-shweld','コーキング':'prc-caulk','外枠塗装':'prc-tosou','組立（組立中）':'prc-asm-in','組立（組立済）':'prc-asm-ok','外注':'prc-out','検査工程':'prc-inspect'};
+
+/* ===== SW register, SWR, API helpers, utils, enter(), renderers ===== */
+/* ... (semua bagian dari file asli tetap sama) ... */
+
+/* ===== QR Station & Scan (PATCH utama) ===== */
+let SESSION=null, CURRENT_PO=null, scanStream=null, scanTimer=null;
+
+function startScanFor(po){
+  CURRENT_PO=po;
+  const dlg=document.getElementById('dlgScan'); if(!dlg) return;
+  dlg.showModal();
+  document.getElementById('scanPO').textContent=po;
+  initScan();
 }
 
-/* ====== 生産現品票 ====== */
-const mapGenpinHeader = h => ({
-  生産開始: h.indexOf('生産開始'),
-  得意先: h.indexOf('得意先'),
-  図番:   h.indexOf('図番'),
-  機種:   h.indexOf('機種'),
-  商品名: h.indexOf('商品名'),
-  数量:   h.indexOf('数量'),
-  注番:   h.indexOf('注番'),
-  備考:   h.indexOf('備考'),
-});
-$('#btn-genpin-upload')?.addEventListener('click',()=>{
-  const f = $('#imp-genpin').files?.[0];
-  if(!f) return alert('ファイルを選択してください');
-  parseSheet(f, rows=>{
-    const h = rows[0]||[]; const pos = mapGenpinHeader(h);
-    const mapped = rows.slice(1).filter(r=>r.some(c=>String(c).trim()!=='')).map(r=>({
-      start_date: r[pos.生産開始]||'',
-      customer:   r[pos.得意先]||'',
-      drawing:    r[pos.図番]||'',
-      model:      r[pos.機種]||'',
-      item_name:  r[pos.商品名]||'',
-      qty: Number(r[pos.数量]||0),
-      order_no:   r[pos.注番]||'',
-      note:       r[pos.備考]||''
-    }));
-    fetchJSON(API_BASE+'?route=importGenpin',{method:'POST',body:JSON.stringify(mapped)})
-      .then(res=>alert(res.message||'取込完了'));
-  });
-});
-$('#btn-genpin-add')?.addEventListener('click',()=>{
-  const payload = {
-    start_date: $('#gp-start').value, customer: $('#gp-cust').value, drawing: $('#gp-zu').value,
-    model: $('#gp-kishu').value, item_name: $('#gp-shohin').value, qty: Number($('#gp-qty').value||0),
-    order_no: $('#gp-chuban').value, note: $('#gp-biko').value
-  };
-  fetchJSON(API_BASE+'?route=importGenpin',{method:'POST',body:JSON.stringify([payload])})
-    .then(res=>alert(res.message||'登録しました'));
-});
+async function initScan(){
+  const video=document.getElementById('scanVideo'), canvas=document.getElementById('scanCanvas'), result=document.getElementById('scanResult');
+  if(!video||!canvas) return;
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject=scanStream; await video.play();
+    const ctx=canvas.getContext('2d');
+    scanTimer = setInterval(async ()=>{
+      if(video.readyState!==video.HAVE_ENOUGH_DATA) return;
+      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+      const code=jsQR(img.data, img.width, img.height);
+      if(code && code.data){
+        result.textContent='読み取り: '+code.data;
+        const token=String(code.data||''); const [prefix, station] = token.split(':');
+        if(prefix==='ST' && station && CURRENT_PO){
+          try{
+            const o=await apiGet({action:'ticket',po_id:CURRENT_PO});
+            const rule=STATION_RULES[station] || ((_o)=>({current_process:station}));
+            const updates=rule(o) || {};
 
-/* ====== 出荷予定 ====== */
-const mapYoteiHeader = h => ({
-  出荷日: h.indexOf('出荷日'),
-  得意先: h.indexOf('得意先'),
-  図番:   h.indexOf('図番'),
-  機種:   h.indexOf('機種'),
-  商品名: h.indexOf('商品名'),
-  数量:   h.indexOf('数量'),
-  送り先: h.indexOf('送り先'),
-  注番:   h.indexOf('注番'),
-  備考:   h.indexOf('備考'),
-});
-$('#btn-yotei-upload')?.addEventListener('click',()=>{
-  const f = $('#imp-yotei').files?.[0];
-  if(!f) return alert('ファイルを選択してください');
-  parseSheet(f, rows=>{
-    const h = rows[0]||[]; const pos = mapYoteiHeader(h);
-    const mapped = rows.slice(1).filter(r=>r.some(c=>String(c).trim()!=='')).map(r=>({
-      ship_date:  r[pos.出荷日]||'',
-      customer:   r[pos.得意先]||'',
-      drawing:    r[pos.図番]||'',
-      model:      r[pos.機種]||'',
-      item_name:  r[pos.商品名]||'',
-      qty: Number(r[pos.数量]||0),
-      dest:       r[pos.送り先]||'',
-      order_no:   r[pos.注番]||'',
-      note:       r[pos.備考]||''
-    }));
-    fetchJSON(API_BASE+'?route=importYotei',{method:'POST',body:JSON.stringify(mapped)})
-      .then(res=>alert(res.message||'取込完了'));
-  });
-});
-$('#btn-yotei-add')?.addEventListener('click',()=>{
-  const payload = {
-    ship_date: $('#yt-date').value, customer: $('#yt-cust').value, drawing: $('#yt-zu').value,
-    model: $('#yt-kishu').value, item_name: $('#yt-shohin').value, qty: Number($('#yt-qty').value||0),
-    dest: $('#yt-okuri').value, order_no: $('#yt-chuban').value, note: $('#yt-biko').value
-  };
-  fetchJSON(API_BASE+'?route=importYotei',{method:'POST',body:JSON.stringify([payload])})
-    .then(res=>alert(res.message||'登録しました'));
-});
+            // NEW: ambil OK/NG dari dialog
+            const okQty = Number(document.getElementById('inOkQty')?.value||0);
+            const ngQty = Number(document.getElementById('inNgQty')?.value||0);
+            const note  = String(document.getElementById('inNote')?.value||'');
 
-/* ====== スキャン/手動 ====== */
-$('#btn-set-process')?.addEventListener('click', async ()=>{
-  const payload = {
-    order_no: $('#sc-chuban').value.trim(),
-    process: normalizeProcess($('#sc-process').value),
-    status: $('#sc-status').value.trim(),
-    ok_qty: Number($('#sc-ok').value||0),
-    ng_qty: Number($('#sc-ng').value||0)
-  };
-  if(!payload.order_no) return alert('注番を入力してください。');
-  const res = await fetchJSON(API_BASE+'?route=setProcess',{method:'POST',body:JSON.stringify(payload)})
-    .catch(e=>({ok:false,message:String(e)}));
-  if(!res.ok) return alert(res.message||'更新失敗');
-  alert(res.message||'工程を更新しました');
-});
+            // NEW: panggil endpoint setProcess supaya OK/NG tercatat ke log
+            await apiPost('setProcess',{ po_id:CURRENT_PO, updates:{...updates, ok_qty:okQty, ng_qty:ngQty, note}, user:SESSION });
 
-/* ====== Charts & Snapshot ====== */
-async function loadSnapshot(){
-  const s = await fetchJSON(API_BASE+'?route=snapshot').catch(()=>null);
-  if(!s) return;
-  $('#kpi-orders').textContent = s.orders||0;
-  $('#kpi-ok').textContent = s.ok||0;
-  $('#kpi-ng').textContent = s.ng||0;
+            alert('更新しました'); refreshAll(true);
+          }catch(e){ alert(e.message||e); }
+        }
+        stopScan(); document.getElementById('dlgScan').close();
+      }
+    }, 300);
+  }catch(e){ alert('カメラ起動不可: '+(e.message||e)); }
 }
-async function renderDefectCharts(){
-  const d = await fetchJSON(API_BASE+'?route=defectsByProcess').catch(()=>null);
-  if(!d) return;
-  const ctx1 = document.getElementById('chart-defect-by-process')?.getContext('2d');
-  if(ctx1){
-    new Chart(ctx1,{type:'bar',data:{labels:d.labels,datasets:[{label:'不良（個）',data:d.values}]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
-  }
-  const ctx2 = document.getElementById('chart-defect')?.getContext('2d');
-  if(ctx2){
-    new Chart(ctx2,{type:'bar',data:{labels:d.labels,datasets:[{label:'不良（個）',data:d.values}]},options:{responsive:true,scales:{y:{beginAtZero:true}}}});
-  }
+function stopScan(){ if(scanTimer){ clearInterval(scanTimer); scanTimer=null; } if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; } }
+const btnScanClose=document.getElementById('btnScanClose'); if(btnScanClose) btnScanClose.onclick=()=>{ stopScan(); document.getElementById('dlgScan').close(); };
+
+/* ===== NEW: Manual set process (fallback) — juga minta OK/NG ===== */
+async function manualSetProcess(po_id){
+  const process = prompt('工程を入力（例: レーザ加工/検査工程/…）:'); if(process===null) return;
+  const okQty = Number(prompt('OK品 数量 (空=0):')||0);
+  const ngQty = Number(prompt('不良品 数量 (空=0):')||0);
+  const note  = prompt('備考/メモ（任意）:')||'';
+  try{
+    await apiPost('setProcess',{ po_id:po_id, updates:{ current_process:process, ok_qty:okQty, ng_qty:ngQty, note }, user:SESSION });
+    alert('更新しました'); refreshAll(true);
+  }catch(e){ alert(e.message||e); }
 }
-document.addEventListener('DOMContentLoaded', ()=>{
-  loadSnapshot(); renderDefectCharts();
-});
+
+/* ===== Orders table: tambah tombol manual proses (opsional tapi berguna) ===== */
+// Di function renderOrders() setelah tombol “更新/出荷票/履歴”, tambahkan:
+// <button class="btn ghost s" onclick="manualSetProcess('${r.po_id}')"><i class="fa-solid fa-screwdriver-wrench"></i> 工程変更</button>
+
+/* ===== Charts (PATCH: tambah 不良品（工程別）) ===== */
+async function renderCharts(){
+  try{
+    const d=await apiGet({action:'charts'},{swrKey:'charts'});
+    const year=d.year|| (new Date()).getFullYear();
+    if(document.getElementById('chartYear')) document.getElementById('chartYear').value=year;
+
+    const ms=(arr)=>({labels:['1','2','3','4','5','6','7','8','9','10','11','12'], datasets:[{label:'数量', data:arr}]});
+    drawBar('chMonthly', ms(d.perMonth));
+    drawPie('chCustomer', d.perCust||{});
+    drawPie('chStock', d.stockBuckets||{});
+    drawBar('chWipProc', {labels:Object.keys(d.wipByProcess||{}), datasets:[{label:'点数', data:Object.values(d.wipByProcess||{})}]});
+    drawBar('chSales', ms(d.salesPerMonth||[]));
+    drawBar('chPlan',  ms(d.planPerMonth||[]));
+
+    // NEW: 不良品（工程別）
+    drawBar('chDefectByProc', { labels: Object.keys(d.defectByProcess||{}), datasets:[{ label:'不良品 数量', data:Object.values(d.defectByProcess||{}) }] });
+  }catch(e){ console.warn(e); }
+}
+function drawBar(id, data){ const ctx=document.getElementById(id); if(!ctx) return; new Chart(ctx, {type:'bar', data, options:{responsive:true, maintainAspectRatio:false, animation:{duration:300}}}); }
+function drawPie(id, obj){ const ctx=document.getElementById(id); if(!ctx) return; new Chart(ctx, {type:'doughnut', data:{labels:Object.keys(obj), datasets:[{data:Object.values(obj)}]}, options:{responsive:true, maintainAspectRatio:false, animation:{duration:300}}}); }
+
+/* ===== Selebihnya (auth, masters, dashboard, sales, plan, ship, invoice, import) — tetap sama dengan file asli ===== */
+// ... salin bagian lain dari file asli tanpa perubahan ...
