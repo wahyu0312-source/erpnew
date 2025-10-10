@@ -59,53 +59,36 @@ dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
   table.table{font-size:12px}
   .table th,.table td{padding:.3rem .35rem}
 }
-/* === Login – bigger & clearer === */
-#authView .card.card-tight{
-  max-width: 560px;           /* sebelumnya 440px */
-  padding: 1.25rem 1.25rem;   /* sedikit lebih lega */
-  border-radius: 16px;
+/* ==== Login: bigger, high-contrast ==== */
+#authView .card {
+  max-width: 520px;               /* semula 440px */
+  padding: 1.25rem 1.25rem 1.1rem;
 }
-
-#authView h2{
-  font-size: 1.45rem;
-  letter-spacing: .01em;
-  margin-bottom: .6rem;
+#authView h2 {
+  font-size: 1.35rem;
+  margin-top: .2rem;
+  margin-bottom: .9rem;
 }
-
-#authView .grid{
+#authView .grid {
   display: grid;
   grid-template-columns: 1fr !important;
-  gap: .8rem;
+  gap: .9rem;
 }
-
 #authView input,
-#authView select{
-  min-height: 52px;           /* tombol & input lebih tinggi */
-  font-size: 16.5px;          /* tetap >=16px (anti-zoom iOS) */
+#authView select {
+  min-height: 52px;               /* lebih tinggi */
+  font-size: 16.5px;              /* teks lebih besar */
   border-radius: 12px;
 }
-
-#authView input::placeholder{
-  color: #475569;             /* lebih gelap dari sebelumnya */
-  opacity: .85;
-  font-weight: 600;
+#authView input::placeholder {
+  color: #64748b;                 /* placeholder terlihat */
+  opacity: .9;
 }
-
-#btnLogin.btn.primary{
-  min-height: 52px;
-  font-size: 16px;
+#btnLogin.btn.primary {
+  height: 52px;
   font-weight: 800;
   letter-spacing: .02em;
   background: #0ea5a4;
   border-color: #0ea5a4;
-  border-radius: 14px;
 }
-#btnLogin.btn.primary:hover{ background:#0d9488; }
-
-details.card[open]{
-  border-color: var(--border);
-}
-details.card summary{
-  cursor: pointer;
-  user-select: none;
-}
+#btnLogin.btn.primary:hover { background:#0d9488; }
