@@ -9,6 +9,7 @@ const PROCESS_LIST = [
   "準備","シャッター溶接","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","出荷（組立済）"
 ];
 
+/* ---------- DOM helpers ---------- */
 const $  = (q,el=document)=> el.querySelector(q);
 const $$ = (q,el=document)=> [...el.querySelectorAll(q)];
 const qs = (o)=> Object.entries(o).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
@@ -22,8 +23,8 @@ function jsonp(action, params={}){
   return new Promise((resolve,reject)=>{
     const cb = "cb_" + Math.random().toString(36).slice(2);
     params = { ...params, action, callback: cb };
-    const s = document.createElement("script");
     const url = `${API_BASE}?${qs(params)}`;
+    const s = document.createElement("script");
     s.src = url;
     window[cb] = (resp)=>{
       delete window[cb]; s.remove();
@@ -116,10 +117,7 @@ $("#btnLogin").onclick = async ()=>{
   if(!u || !p) return alert("ユーザー名 / パスワード を入力してください");
 
   try{
-    // ping dulu supaya ketahuan kalau URL salah
-    const ping = await jsonp('ping');
-    console.log('Ping:', ping);
-
+    await jsonp('ping'); // sanity check
     const me = await jsonp("login", { username:u, password:p });
     setUser(me);
   }catch(e){
@@ -176,7 +174,7 @@ async function loadStats(){
   if(!today.length){ ul.innerHTML = `<div class="muted s">なし</div>`; }
   else today.forEach(x=>{
     const div = document.createElement("div");
-    div.innerHTML = `<div class="row"><span class="badge st-ready"><i class="fa-solid fa-truck"></i>${(x.scheduled_date||"").slice(0,10)}</span><b style="margin-left:.4rem">${x.po_id}</b> × ${x.qty||0}</div>`;
+    div.innerHTML = `<div class="row"><span class="badge st-ready"><i class="fa-solid fa-truck"></i>${(String(x.scheduled_date||"")).slice(0,10)}</span><b style="margin-left:.4rem">${x.po_id}</b> × ${x.qty||0}</div>`;
     ul.appendChild(div);
   });
 }
@@ -229,5 +227,82 @@ async function saveManual(){
   $("#dlgManual").close(); await refreshAll();
 }
 
+/* ---------- Station QR (設定 → 工程QR) ---------- */
+$("#miStationQR")?.addEventListener("click", ()=>{
+  const dlg = $("#dlgStationQR");
+  const wrap = $("#qrWrap"); wrap.innerHTML = "";
+  PROCESS_LIST.forEach(p=>{
+    const box = document.createElement("div");
+    box.style = "border:1px solid var(--border);padding:.6rem;border-radius:10px;display:flex;align-items:center;gap:.6rem";
+    const qrDiv = document.createElement("div");
+    qrDiv.style = "width:96px;height:96px";
+    box.appendChild(qrDiv);
+    const txt = document.createElement("div");
+    txt.innerHTML = `<b>${normalizeProc(p)}</b><div class="muted s">ST:${normalizeProc(p)}</div>`;
+    box.appendChild(txt);
+    wrap.appendChild(box);
+    // qrcodejs
+    /* global QRCode */
+    new QRCode(qrDiv, { text:`ST:${normalizeProc(p)}`, width:96, height:96 });
+  });
+  dlg.showModal();
+});
+
+/* ---------- Scanner dialog skeleton (optional to wire later) ---------- */
+function openScanDialog(po){
+  $("#scanPO").textContent = po;
+  $("#dlgScan").showModal();
+}
+$("#btnScanClose")?.addEventListener("click", ()=> $("#dlgScan").close());
+
+/* ---------- Weather (no key, Open-Meteo + reverse geocode) ---------- */
+async function initWeather(){
+  const cityEl=$("#wxCity"), iconEl=$("#wxIcon"), tempEl=$("#wxTemp");
+  const iconFor = (code)=>{
+    // Simple mapping
+    if([0].includes(code)) return "☀️";
+    if([1,2,3].includes(code)) return "⛅";
+    if([45,48].includes(code)) return "🌫️";
+    if([51,53,55,61,63,65,80,81,82].includes(code)) return "🌧️";
+    if([56,57,66,67,71,73,75,77,85,86].includes(code)) return "🌨️";
+    if([95,96,99].includes(code)) return "⛈️";
+    return "🌡️";
+  };
+  try{
+    // cari lokasi
+    let lat=35.6812, lon=139.7671, city="東京";
+    if(navigator.geolocation){
+      await new Promise((res)=> {
+        navigator.geolocation.getCurrentPosition(p=>{
+          lat=p.coords.latitude; lon=p.coords.longitude; res();
+        }, ()=>res(), {timeout:2500});
+      });
+    }
+    // reverse geocode (tanpa key)
+    try{
+      const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=ja`);
+      if(r.ok){
+        const j = await r.json();
+        city = j.city || j.locality || j.principalSubdivision || "現在地";
+      }
+    }catch(_){}
+    // weather
+    const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`);
+    const j = await w.json();
+    const t = Math.round(j?.current?.temperature_2m ?? 0);
+    const code = j?.current?.weather_code ?? -1;
+    cityEl.textContent = city;
+    iconEl.textContent = iconFor(code);
+    tempEl.textContent = `${t}℃`;
+  }catch(e){
+    cityEl.textContent = "取得失敗";
+    iconEl.textContent = "—";
+    tempEl.textContent = "--℃";
+  }
+}
+
 /* ---------- Init ---------- */
-document.addEventListener("DOMContentLoaded", ()=> setUser(null));
+document.addEventListener("DOMContentLoaded", ()=>{
+  setUser(null);
+  initWeather();
+});
