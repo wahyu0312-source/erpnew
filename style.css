@@ -26,3 +26,9 @@ body{font:14px/1.6 Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;ba
 .card-tight{max-width:420px;margin:auto}
 .weather{display:flex;align-items:center;gap:8px;font-weight:600}
 .hidden{display:none}
+/* util kecil yang dipakai index baru */
+.grid-chips{ grid-template-columns: repeat(auto-fill, minmax(120px,1fr)); gap:8px }
+.chip{border:1px solid var(--border,#e5e7eb); background:#fff; border-radius:999px; padding:.35rem .6rem; display:flex; align-items:center; justify-content:space-between; gap:.5rem}
+.chip .pill{background:#eef2ff; border-radius:999px; padding:.15rem .45rem; font-weight:700}
+.card-tight{max-width:520px}
+.grow{flex:1}
