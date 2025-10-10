@@ -14,12 +14,13 @@ body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,'Hiragino 
 .wx-pill{display:inline-flex;align-items:center;gap:.6rem;padding:.4rem .7rem;border-radius:999px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35)}
 .container{max-width:min(92vw,1600px);margin:1.1rem auto;padding:0 1rem}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:1rem}
-.card-tight{max-width:440px;margin:4rem auto}
+.card-tight{max-width:520px;margin:4rem auto}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}
 .row{display:flex;align-items:center;gap:.5rem}
 .row-end{display:flex;justify-content:flex-end;gap:.5rem}
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:.6rem}
 .grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8rem}
+.grid-chips{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
 @media (max-width:960px){ .grid-3{grid-template-columns:1fr} }
 .tile{border:1px solid var(--border);border-radius:12px;padding:.8rem;background:linear-gradient(180deg,#fff,#f8fafc)}
 .stat-num{font-size:2.2rem;font-weight:900}
@@ -31,6 +32,7 @@ body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,'Hiragino 
 .btn.ghost:hover{background:#f1f5f9}
 .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
 .full{width:100%}.grow{flex:1}.hidden{display:none!important}.muted{color:var(--muted)}.s{font-size:.9rem}
+.center{text-align:center}
 .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
 table.table{width:100%;border-collapse:separate;border-spacing:0}
 .table th,.table td{padding:.6rem .7rem;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;white-space:nowrap}
@@ -60,35 +62,10 @@ dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
   .table th,.table td{padding:.3rem .35rem}
 }
 /* ==== Login: bigger, high-contrast ==== */
-#authView .card {
-  max-width: 520px;               /* semula 440px */
-  padding: 1.25rem 1.25rem 1.1rem;
-}
-#authView h2 {
-  font-size: 1.35rem;
-  margin-top: .2rem;
-  margin-bottom: .9rem;
-}
-#authView .grid {
-  display: grid;
-  grid-template-columns: 1fr !important;
-  gap: .9rem;
-}
-#authView input,
-#authView select {
-  min-height: 52px;               /* lebih tinggi */
-  font-size: 16.5px;              /* teks lebih besar */
-  border-radius: 12px;
-}
-#authView input::placeholder {
-  color: #64748b;                 /* placeholder terlihat */
-  opacity: .9;
-}
-#btnLogin.btn.primary {
-  height: 52px;
-  font-weight: 800;
-  letter-spacing: .02em;
-  background: #0ea5a4;
-  border-color: #0ea5a4;
-}
+#authView .card { max-width: 520px; padding: 1.25rem 1.25rem 1.1rem; }
+#authView h2 { font-size: 1.35rem; margin-top: .2rem; margin-bottom: .9rem; }
+#authView .grid { display: grid; grid-template-columns: 1fr !important; gap: .9rem; }
+#authView input, #authView select { min-height: 52px; font-size: 16.5px; border-radius: 12px; }
+#authView input::placeholder { color: #64748b; opacity: .9; }
+#btnLogin.btn.primary { height: 52px; font-weight: 800; letter-spacing: .02em; background: #0ea5a4; border-color: #0ea5a4; }
 #btnLogin.btn.primary:hover { background:#0d9488; }
