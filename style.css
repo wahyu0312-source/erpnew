@@ -123,3 +123,55 @@ dialog footer{padding:0 1rem 1rem}
 /* ===== Helpers ===== */
 .grid-chips{display:flex;flex-wrap:wrap;gap:.35rem}
 .row.gap{gap:.5rem}
+/* ======== NAV: tombol terlihat jelas sebelum diklik ======== */
+.nav .btn {
+  border: 1px solid rgba(255,255,255,.85);
+  background: rgba(255,255,255,.22);   /* ada latar dari awal */
+  color: #ffffff;
+  font-weight: 700;
+  backdrop-filter: saturate(140%) blur(2px);
+}
+.nav .btn:hover,
+.nav .btn:focus {
+  background: rgba(255,255,255,.34);
+  border-color: #ffffff;
+  box-shadow: 0 0 0 .12rem rgba(255,255,255,.35);
+}
+.nav .btn.ghost {
+  /* “ghost” di navbar tetap kontras */
+  background: rgba(255,255,255,.18);
+  border-color: rgba(255,255,255,.85);
+  color: #ffffff;
+}
+.nav .btn.ghost:hover,
+.nav .btn.ghost:focus {
+  background: rgba(255,255,255,.32);
+}
+
+/* ikon caret di dropdown setting juga dibikin terang */
+.nav .caret { color: #fff; opacity: .95; }
+
+/* ======== LOGIN: input-nya besar & terbaca ======== */
+#authView .card input,
+#authView .card select {
+  min-height: 44px;        /* lebih tinggi */
+  font-size: 16px;         /* anti zoom di iOS dan lebih jelas */
+  border-radius: 12px;
+}
+#authView .card input::placeholder { color: #94a3b8; } /* slate-400 */
+
+/* grid login -> 1 kolom penuh, biar input tidak mungil */
+#authView .grid {
+  display: grid;
+  grid-template-columns: 1fr !important;
+  gap: .7rem;
+}
+#authView .grid > * { grid-column: 1 / -1; }
+
+/* tombol login juga lebih kontras */
+#btnLogin.btn.primary {
+  background: #0ea5a4;
+  border-color: #0ea5a4;
+}
+#btnLogin.btn.primary:hover { background:#0d9488; }
+
