@@ -7,283 +7,208 @@
   <link rel="icon" href="assets/tsh.png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer">
   <link rel="stylesheet" href="style.css">
-
   <!-- Charts & QR -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <!-- SheetJS -->
+  <!-- SheetJS for CSV/XLSX -->
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <!-- App -->
   <script defer src="app.js"></script>
 </head>
 <body>
 
-  <!-- NAV -->
-  <nav class="nav">
-    <div class="nav-left">
-      <img src="assets/tsh.png" class="logo" alt="">
-      <span class="brand">東京精密発條株式会社システム</span>
+<!-- ================= NAV ================= -->
+<nav class="nav">
+  <div class="nav-left">
+    <img src="assets/tsh.png" class="logo" alt="">
+    <span class="brand">東京精密発條株式会社システム</span>
+  </div>
+
+  <!-- Weather pill -->
+  <div id="weather" class="wx-pill" aria-live="polite" title="現在の天気">
+    <span id="wxCity" class="wx-city">取得中…</span>
+    <span class="wx-dot" aria-hidden="true"></span>
+    <span id="wxIcon" class="wx-ico" aria-hidden="true"></span>
+    <span id="wxTemp" class="wx-temp">--℃</span>
+  </div>
+
+  <div class="nav-right">
+    <button id="btnToDash" class="btn ghost hidden"><i class="fa-solid fa-gauge"></i> ダッシュボード</button>
+    <button id="btnToSales" class="btn ghost hidden"><i class="fa-regular fa-handshake"></i> 受注（営業）</button>
+    <button id="btnToPlan" class="btn ghost hidden"><i class="fa-solid fa-list-check"></i> 生産計画</button>
+    <button id="btnToShip" class="btn ghost hidden"><i class="fa-solid fa-truck"></i> 出荷予定</button>
+    <button id="btnToInvPage" class="btn ghost hidden"><i class="fa-solid fa-boxes-stacked"></i> 在庫</button>
+    <button id="btnToFinPage" class="btn ghost hidden"><i class="fa-regular fa-square-check"></i> 完成品一覧</button>
+    <button id="btnToInvoice" class="btn ghost hidden"><i class="fa-regular fa-file-lines"></i> 請求書</button>
+    <button id="btnToCharts" class="btn ghost hidden"><i class="fa-solid fa-chart-simple"></i> 統計</button>
+
+    <!-- SETTINGS -->
+    <details class="dropdown-inline hidden" id="ddSetting">
+      <summary class="btn ghost"><i class="fa-solid fa-gear"></i> 設定 <i class="fa-solid fa-caret-down caret" style="margin-left:.25rem"></i></summary>
+      <div class="menu right">
+        <button id="miStationQR" class="menu-item"><i class="fa-solid fa-qrcode"></i> 工程QR</button>
+        <button id="miAddUser" class="menu-item"><i class="fa-solid fa-user-plus"></i> ユーザー追加</button>
+        <button id="miChangePass" class="menu-item"><i class="fa-solid fa-key"></i> パス変更</button>
+        <hr style="border:none;border-top:1px solid var(--border);margin:.35rem 0">
+        <button id="btnLogout" class="menu-item"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
+      </div>
+    </details>
+    <span id="userInfo" class="muted"></span>
+  </div>
+</nav>
+
+<a class="corner-brand" href="#" aria-label="Design credit">Design by Wahyu</a>
+
+<!-- ================= AUTH ================= -->
+<main id="authView" class="container">
+  <section class="card card-tight">
+    <h2><i class="fa-solid fa-right-to-bracket"></i> ログイン</h2>
+    <div class="grid">
+      <input id="inUser" placeholder="ユーザー名">
+      <input id="inPass" type="password" placeholder="パスワード">
     </div>
 
-    <!-- Weather (auto) -->
-    <div id="weather" class="wx-pill" title="現在の天気">
-      <span id="wxCity" class="wx-city">取得中…</span>
-      <span class="wx-temp" id="wxTemp">--℃</span>
-    </div>
-
-    <div class="nav-right">
-      <button id="btnToDash" class="btn ghost hidden"><i class="fa-solid fa-gauge"></i> ダッシュボード</button>
-      <button id="btnToSales" class="btn ghost hidden"><i class="fa-regular fa-handshake"></i> 受注</button>
-      <button id="btnToPlan"  class="btn ghost hidden"><i class="fa-solid fa-list-check"></i> 生産計画</button>
-      <button id="btnToShip"  class="btn ghost hidden"><i class="fa-solid fa-truck"></i> 出荷予定</button>
-      <button id="btnToInv"   class="btn ghost hidden"><i class="fa-solid fa-boxes-stacked"></i> 在庫</button>
-      <button id="btnToFin"   class="btn ghost hidden"><i class="fa-regular fa-square-check"></i> 完成品一覧</button>
-      <button id="btnToInvoice" class="btn ghost hidden"><i class="fa-regular fa-file-lines"></i> 請求書</button>
-      <button id="btnToCharts"  class="btn ghost hidden"><i class="fa-solid fa-chart-simple"></i> 統計</button>
-
-      <details id="ddSetting" class="dropdown-inline hidden">
-        <summary class="btn ghost"><i class="fa-solid fa-gear"></i> 設定 <i class="fa-solid fa-caret-down caret"></i></summary>
-        <div class="menu right">
-          <button id="miStationQR" class="menu-item"><i class="fa-solid fa-qrcode"></i> 工程QR</button>
-          <button id="miAddUser" class="menu-item"><i class="fa-solid fa-user-plus"></i> ユーザー追加</button>
-          <button id="miChangePass" class="menu-item"><i class="fa-solid fa-key"></i> パス変更</button>
-          <hr>
-          <button id="btnLogout" class="menu-item"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
-        </div>
-      </details>
-
-      <span id="userInfo" class="muted"></span>
-    </div>
-  </nav>
-
-  <!-- corner badge -->
-  <a class="corner-brand" href="#" aria-label="Design credit">Design by Wahyu</a>
-
-  <!-- AUTH -->
-  <main id="authView" class="container">
-    <section class="card card-tight">
-      <h2><i class="fa-solid fa-right-to-bracket"></i> ログイン</h2>
-      <div class="grid">
-        <input id="inUser" placeholder="ユーザー名">
-        <input id="inPass" type="password" placeholder="パスワード">
-      </div>
-
-      <details class="card" style="margin-top:.8rem">
-        <summary><strong><i class="fa-solid fa-user-gear"></i> 管理者: ユーザー追加</strong></summary>
-        <div class="grid" style="margin-top:.6rem">
-          <input id="nuUser" placeholder="ユーザー名">
-          <input id="nuPass" type="password" placeholder="パスワード">
-          <input id="nuName" placeholder="氏名">
-          <select id="nuDept">
-            <option value="営業">営業</option><option value="生産技術">生産技術</option><option value="生産管理部">生産管理部</option><option value="製造部">製造部</option><option value="検査部">検査部</option>
-          </select>
-          <select id="nuRole"><option value="member">member</option><option value="manager">manager</option><option value="admin">admin</option></select>
-        </div>
-        <button id="btnNewUser" class="btn ghost full">ユーザー追加</button>
-        <p class="muted s">初回: <code>admin / 任意</code>（Usersが空なら自動作成）</p>
-      </details>
-
-      <button id="btnLogin" class="btn primary full" style="margin-top:.8rem">ログイン</button>
-    </section>
-  </main>
-
-  <!-- DASH -->
-  <main id="pageDash" class="container hidden">
-    <section class="card" id="ordersSection">
-      <header class="row-between">
-        <h3><i class="fa-solid fa-clipboard-list"></i> オーダー一覧</h3>
-        <div class="row gap">
-          <input id="searchQ" placeholder="検索..." class="input">
-          <button class="btn ghost" id="btnExportOrders"><i class="fa-solid fa-file-csv"></i> 注文CSV</button>
-          <button class="btn ghost" id="btnExportShip"><i class="fa-solid fa-file-csv"></i> 本日出荷CSV</button>
-        </div>
-      </header>
-
-      <div class="table-wrap">
-        <table class="table s">
-          <thead>
-            <tr>
-              <th>注番 / 得意先</th>
-              <th class="hide-sm">品名</th>
-              <th class="hide-sm">品番/図番</th>
-              <th>状態</th>
-              <th>工程</th>
-              <th class="hide-sm">更新日時</th>
-              <th class="hide-sm">更新者</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="tbOrders"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="card">
-      <header class="row-between">
-        <h3><i class="fa-solid fa-gauge"></i> ダッシュボード</h3>
-        <div class="row gap">
-          <button class="btn ghost" id="btnRefresh"><i class="fa-solid fa-rotate"></i> 更新</button>
-          <button class="btn ghost" onclick="window.print()"><i class="fa-solid fa-print"></i> 印刷</button>
-        </div>
-      </header>
-      <div class="grid-3">
-        <div class="tile">
-          <div class="muted s">完成品在庫</div>
-          <div id="statFinished" class="stat-num">-</div>
-          <div class="muted s"><span id="statReady">-</span> 準備 / <span id="statShipped">-</span> 出荷済</div>
-        </div>
-        <div class="tile">
-          <div class="muted s">本日の出荷予定</div>
-          <div id="listToday" class="list s"></div>
-        </div>
-        <div class="tile">
-          <div class="muted s">工程内滞留（現在位置）</div>
-          <div id="gridProc" class="grid-chips"></div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- SALES -->
-  <main id="pageSales" class="container hidden">
-    <section class="card">
-      <header class="row-between">
-        <h3><i class="fa-regular fa-handshake"></i> 受注</h3>
-        <div class="row gap">
-          <input type="file" id="fileSales" accept=".csv, .xlsx" class="hidden">
-          <button class="btn ghost" id="btnSalesImport"><i class="fa-solid fa-file-arrow-up"></i> インポート</button>
-          <button class="btn ghost" id="btnSalesExport"><i class="fa-solid fa-file-csv"></i> エクスポート</button>
-          <button class="btn primary" id="btnSalesSave"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
-          <button class="btn" id="btnPromote"><i class="fa-solid fa-arrow-right"></i> 計画に変換</button>
-        </div>
-      </header>
-      <div class="grid">
-        <input id="so_date" type="date" placeholder="受注日">
-        <input id="so_cust" placeholder="得意先">
-        <input id="so_item" placeholder="品名">
-        <input id="so_part" placeholder="品番">
-        <input id="so_drw" placeholder="図番">
-        <input id="so_sei" placeholder="製番号">
-        <input id="so_qty" type="number" placeholder="数量">
-        <input id="so_req" type="date" placeholder="希望納期">
-        <input id="so_note" placeholder="備考">
-      </div>
-    </section>
-  </main>
-
-  <!-- PLAN -->
-  <main id="pagePlan" class="container hidden">
-    <section class="card">
-      <header class="row-between">
-        <h3><i class="fa-solid fa-list-check"></i> 生産計画（生産現品票）</h3>
-        <div class="row gap">
-          <input type="file" id="filePlan" accept=".csv, .xlsx" class="hidden">
-          <button class="btn ghost" id="btnPlanImport"><i class="fa-solid fa-file-arrow-up"></i> インポート</button>
-          <button class="btn ghost" id="btnPlanExport"><i class="fa-solid fa-file-csv"></i> エクスポート</button>
-          <button class="btn primary" id="btnCreateOrder"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
-          <button class="btn" id="btnTicket"><i class="fa-solid fa-print"></i> 印刷</button>
-        </div>
-      </header>
-      <div class="grid">
-        <input id="c_tokui" placeholder="得意先">
-        <input id="c_sei" placeholder="製番号">
-        <input id="c_hinmei" placeholder="品名">
-        <input id="c_hinban" placeholder="品番">
-        <input id="c_zuban" placeholder="図番">
-        <input id="c_qty" type="number" placeholder="数量">
-        <input id="c_note" placeholder="備考">
-      </div>
-    </section>
-  </main>
-
-  <!-- SHIP -->
-  <main id="pageShip" class="container hidden">
-    <section class="card">
-      <header class="row-between">
-        <h3><i class="fa-solid fa-truck"></i> 出荷予定 / 出荷確認</h3>
-        <div class="row gap">
-          <input type="file" id="fileShip" accept=".csv, .xlsx" class="hidden">
-          <button class="btn ghost" id="btnShipImport"><i class="fa-solid fa-file-arrow-up"></i> インポート</button>
-          <button class="btn ghost" id="btnShipExport"><i class="fa-solid fa-file-csv"></i> エクスポート</button>
-          <button class="btn primary" id="btnSchedule"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
-          <button class="btn" id="btnShipPrint"><i class="fa-solid fa-print"></i> 印刷</button>
-        </div>
-      </header>
-      <div class="grid">
-        <input id="s_po" placeholder="PO ID">
-        <input id="s_date" type="date">
-        <input id="s_qty" type="number" min="0" placeholder="数量">
-        <input id="s_note" placeholder="備考">
-      </div>
-    </section>
-  </main>
-
-  <!-- INVENTORY -->
-  <main id="pageInv" class="container hidden">
-    <section class="card">
-      <header class="row-between"><h3><i class="fa-solid fa-boxes-stacked"></i> 在庫</h3><input id="invQ" placeholder="検索..." class="input"></header>
-      <div class="table-wrap"><table class="table s"><thead><tr><th>商品名</th><th>在庫数</th><th class="hide-sm">最終更新</th></tr></thead><tbody id="tbInv"></tbody></table></div>
-    </section>
-  </main>
-
-  <!-- FINISHED -->
-  <main id="pageFin" class="container hidden">
-    <section class="card">
-      <header class="row-between"><h3><i class="fa-regular fa-square-check"></i> 完成品一覧</h3><input id="finQ" placeholder="検索..." class="input"></header>
-      <div class="table-wrap"><table class="table s"><thead><tr><th>注番</th><th>品名</th><th>完成数</th><th class="hide-sm">最終更新</th></tr></thead><tbody id="tbFin"></tbody></table></div>
-    </section>
-  </main>
-
-  <!-- CHARTS -->
-  <main id="pageCharts" class="container hidden">
-    <section class="card">
-      <header class="row-between">
-        <h3><i class="fa-solid fa-chart-simple"></i> 統計</h3>
-        <div class="row gap">
-          <select id="chartYear" class="input" style="width:120px"></select>
-          <button id="btnChartsRefresh" class="btn ghost"><i class="fa-solid fa-rotate"></i> 更新</button>
-        </div>
-      </header>
-      <div class="grid-3">
-        <div class="tile"><div class="muted s">月別出荷数量</div><div style="height:220px"><canvas id="chMonthly"></canvas></div></div>
-        <div class="tile"><div class="muted s">得意先別出荷</div><div style="height:220px"><canvas id="chCustomer"></canvas></div></div>
-        <div class="tile"><div class="muted s">工程内WIP</div><div style="height:220px"><canvas id="chWipProc"></canvas></div></div>
-      </div>
-    </section>
-  </main>
-
-  <!-- DIALOGS -->
-  <dialog id="dlgManual" class="paper">
-    <div class="body">
-      <h3>工程 手動更新（PO: <span id="mPO"></span>）</h3>
-      <div class="grid">
-        <select id="mProc"></select>
-        <select id="mStatus">
-          <option>進行</option><option>検査中</option><option>組立中</option><option>組立済</option><option>検査済</option><option>出荷準備</option><option>出荷済</option><option>NG</option>
+    <details class="card" style="margin-top:.8rem">
+      <summary><strong><i class="fa-solid fa-user-gear"></i> 管理者: ユーザー追加</strong></summary>
+      <div class="grid" style="margin-top:.6rem">
+        <input id="nuUser" placeholder="ユーザー名">
+        <input id="nuPass" type="password" placeholder="パスワード">
+        <input id="nuName" placeholder="氏名">
+        <select id="nuDept">
+          <option value="営業">営業</option><option value="生産管理部">生産管理部</option>
+          <option value="製造部">製造部</option><option value="検査部">検査部</option>
         </select>
-        <input id="mOK" type="number" placeholder="OK 数">
-        <input id="mNG" type="number" placeholder="NG 数">
-        <input id="mNote" placeholder="メモ">
+        <select id="nuRole">
+          <option value="member">member</option><option value="manager">manager</option><option value="admin">admin</option>
+        </select>
+      </div>
+      <button id="btnNewUser" class="btn ghost full">ユーザー追加</button>
+      <p class="muted s">初回: <code>admin / admin123</code>（Users空なら自動作成。部門=生産技術）</p>
+    </details>
+
+    <button id="btnLogin" class="btn primary full" style="margin-top:.8rem">ログイン</button>
+  </section>
+</main>
+
+<!-- ================= DASHBOARD ================= -->
+<main id="pageDash" class="container hidden">
+  <section class="card" id="ordersSection">
+    <header class="row-between">
+      <h3><i class="fa-solid fa-clipboard-list"></i> オーダー一覧</h3>
+      <div class="row gap">
+        <input id="searchQ" placeholder="検索..." class="input">
+        <button class="btn ghost" id="btnExportOrders"><i class="fa-solid fa-file-csv"></i> 注文CSV</button>
+        <button class="btn ghost" id="btnExportShip"><i class="fa-solid fa-file-csv"></i> 本日出荷CSV</button>
+      </div>
+    </header>
+
+    <div class="table-wrap">
+      <table class="table table-fit s">
+        <thead>
+          <tr>
+            <th class="col-po">注番 / 得意先</th>
+            <th class="col-name">品名</th>
+            <th class="col-part">品番</th>
+            <th class="col-drw">図番</th>
+            <th class="col-status">状態</th>
+            <th class="col-proc">工程</th>
+            <th class="col-updAt">更新日時</th>
+            <th class="col-updBy">更新者</th>
+            <th class="col-act">操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbOrders"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <header class="row-between">
+      <h3><i class="fa-solid fa-gauge"></i> ダッシュボード</h3>
+      <div class="row gap">
+        <button class="btn ghost" id="btnRefresh"><i class="fa-solid fa-rotate"></i> 更新</button>
+        <button class="btn ghost" onclick="window.print()"><i class="fa-solid fa-print"></i> 印刷</button>
+      </div>
+    </header>
+
+    <div class="grid-3">
+      <div class="tile">
+        <div class="muted s">完成品在庫</div>
+        <div id="statFinished" class="stat-num">-</div>
+        <div class="muted s"><span id="statReady">-</span> 準備 / <span id="statShipped">-</span> 出荷済</div>
+      </div>
+      <div class="tile">
+        <div class="muted s">本日の出荷予定</div>
+        <div id="listToday" class="list s"></div>
+      </div>
+      <div class="tile">
+        <div class="muted s">工程内滞留（現在位置）</div>
+        <div id="gridProc" class="grid grid-chips"></div>
       </div>
     </div>
-    <footer class="row-end"><button class="btn ghost" id="mClose">閉じる</button><button class="btn" id="mSave">保存</button></footer>
-  </dialog>
+  </section>
+</main>
 
-  <dialog id="dlgStationQR" class="paper">
-    <div class="body"><h3>工程QR（現場掲示用）</h3><div id="qrWrap" class="grid"></div></div>
-    <footer class="row-end"><button class="btn" onclick="document.getElementById('dlgStationQR').close()">閉じる</button></footer>
-  </dialog>
+<!-- (Halaman lain tetap ada di file kamu. Kalau kosong, biarkan) -->
 
-  <dialog id="dlgScan" class="paper">
-    <div class="body">
-      <h3>QRスキャン更新（PO: <span id="scanPO"></span>）</h3>
-      <video id="scanVideo" playsinline></video>
-      <canvas id="scanCanvas" class="hidden"></canvas>
-      <div id="scanResult" class="muted s" style="margin-top:.5rem"></div>
+<!-- ================ Dialogs ================ -->
+<dialog id="dlgStationQR" class="paper">
+  <div class="body"><h3>工程QR（現場掲示用）</h3><p class="muted s">フォーマット: <code>ST:工程名</code></p><div id="qrWrap" class="grid"></div></div>
+  <footer class="row-end"><button class="btn" onclick="document.getElementById('dlgStationQR').close()">閉じる</button></footer>
+</dialog>
+
+<dialog id="dlgScan" class="paper">
+  <div class="body">
+    <h3>QRスキャン更新（PO: <span id="scanPO"></span>）</h3>
+    <p class="muted s">工程QRを読み取ると切替され履歴に記録されます。</p>
+    <video id="scanVideo" playsinline></video>
+    <canvas id="scanCanvas" class="hidden"></canvas>
+    <div id="scanResult" class="muted s" style="margin-top:.5rem"></div>
+  </div>
+  <footer class="row-end"><button class="btn ghost" id="btnScanStart">開始</button><button class="btn" id="btnScanClose">閉じる</button></footer>
+</dialog>
+
+<dialog id="dlgManual" class="paper">
+  <div class="body">
+    <h3>工程 手動更新（PO: <span id="mPO"></span>）</h3>
+    <div class="grid">
+      <select id="mProc"></select>
+      <select id="mStatus"></select>
+      <input id="mOK" type="number" min="0" placeholder="OK 数">
+      <input id="mNG" type="number" min="0" placeholder="NG 数">
+      <input id="mNote" placeholder="備考">
     </div>
-    <footer class="row-end"><button class="btn ghost" id="btnScanStart">開始</button><button class="btn" id="btnScanClose">閉じる</button></footer>
-  </dialog>
+  </div>
+  <footer class="row-end"><button class="btn" id="mClose">閉じる</button><button class="btn primary" id="mSave">保存</button></footer>
+</dialog>
 
+<script>
+/* ===== Weather (simple, no key) ===== */
+(async function(){
+  const elCity = document.getElementById('wxCity');
+  const elTemp = document.getElementById('wxTemp');
+  const elIcon = document.getElementById('wxIcon');
+  const fallback = { lat:35.6809591, lon:139.7673068, city:'東京' };
+  const svg = p=>`<svg viewBox="0 0 24 24" class="wx-ico" xmlns="http://www.w3.org/2000/svg"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</g></svg>`;
+  const ICONS = {
+    sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+    cloud: svg('<path d="M6 16a4 4 0 0 1 1-7.9A5.5 5.5 0 0 1 18 10a4 4 0 0 1 0 8H8a4 4 0 0 1-2-7.5"/>'),
+  };
+  const codeIcon = c => ([0].includes(c)?ICONS.sun:ICONS.cloud);
+  function geo(){return new Promise(r=>navigator.geolocation?
+    navigator.geolocation.getCurrentPosition(p=>r({lat:p.coords.latitude,lon:p.coords.longitude}), _=>r(null),{timeout:5000}):r(null));}
+  async function city(lat,lon){try{
+    const j=await (await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=ja`)).json();
+    return j.city||j.locality||j.principalSubdivision||'東京';
+  }catch{return '東京'}}
+  async function weather(lat,lon){const j=await (await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=auto`)).json();return j.current_weather}
+  try{
+    const g=await geo(); const lat=g?.lat??fallback.lat, lon=g?.lon??fallback.lon;
+    const [c,w]=await Promise.all([city(lat,lon), weather(lat,lon)]);
+    elCity.textContent=c; elTemp.textContent=Math.round(w.temperature)+'℃'; elIcon.innerHTML=codeIcon(+w.weathercode);
+  }catch{ elCity.textContent=fallback.city; elTemp.textContent='--℃'; elIcon.innerHTML=ICONS.cloud; }
+})();
+</script>
 </body>
 </html>
