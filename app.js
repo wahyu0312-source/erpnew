@@ -27,10 +27,24 @@ const MENU_PERMS = {
 
 const $ = q => document.querySelector(q);
 const $$ = q => Array.from(document.querySelectorAll(q));
-async function API(action, data={}){
-  const r = await fetch(API_BASE, { method:'POST', headers:{'Content-Type':'text/plain'}, body:JSON.stringify({action, ...data}) });
-  const t = await r.text(); try{ return JSON.parse(t); } catch{ throw new Error('API parse error'); }
+// === REPLACE fungsi API(...) sepenuhnya ===
+async function API(action, data = {}) {
+  // kirim sebagai application/x-www-form-urlencoded (simple request)
+  const body = new URLSearchParams({
+    payload: JSON.stringify({ action, ...data })
+  });
+
+  const r = await fetch(API_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+    body
+  });
+
+  const txt = await r.text();
+  try { return JSON.parse(txt); }
+  catch { throw new Error(txt || 'API error'); }
 }
+
 
 /* ================== STATE ================== */
 const state = { user:null, orders:[] };
