@@ -1,76 +1,32 @@
-/* =========================================================
- * sw.js — Service Worker (Offline + Performance)
- * - Cache-first untuk assets (HTML/CSS/JS/Fonts/Icons) => SWR
- * - Network-first untuk API GET ke Apps Script, fallback ke cache
- * ========================================================= */
-const SW_VERSION = 'tsh-erp-v4';
-const ASSET_CACHE = `${SW_VERSION}-assets`;
-const API_CACHE = `${SW_VERSION}-api`;
+self.addEventListener('install', (e)=> self.skipWaiting());
+self.addEventListener('activate', (e)=> clients.claim());
 
-// Sesuaikan origin dari proyek kamu (pakai self.location.origin untuk same-origin)
-const API_BASE = 'https://script.google.com/macros/s/AKfycbwnU2BvQ6poO4EmMut3g5Zuu_cuojNbTmM8oRSCyNJDwm_38VgS7BhsFLKU0eoUt-BAKw/exec';
+const STATIC = 'static-v1';
+const ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/assets/tsh.png'];
 
-const CORE_ASSETS = [
-  './',
-  './index.html',
-  './style.css',
-  './app.js',
-  './assets/tsh.png',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
-  'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
-  'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js',
-];
-
-self.addEventListener('install', (e)=>{
-  self.skipWaiting();
-  e.waitUntil(
-    caches.open(ASSET_CACHE).then(cache=> cache.addAll(CORE_ASSETS).catch(()=>{}))
-  );
-});
-self.addEventListener('activate', (e)=>{
-  e.waitUntil(
-    caches.keys().then(keys=> Promise.all(
-      keys.filter(k=> ![ASSET_CACHE, API_CACHE].includes(k)).map(k=> caches.delete(k))
-    ))
-  );
-  self.clients.claim();
+self.addEventListener('install', (event)=>{
+  event.waitUntil(caches.open(STATIC).then(c=> c.addAll(ASSETS)));
 });
 
-self.addEventListener('fetch', (e)=>{
-  const req = e.request;
-  const url = new URL(req.url);
-
-  // Only GET requests are cachable
-  if(req.method !== 'GET') return;
-
-  // API GET — network-first with cache fallback (offline-friendly)
-  if (url.href.startsWith(API_BASE)) {
-    e.respondWith((async ()=>{
+// cache-first utk asset; network-first utk data
+self.addEventListener('fetch', (event)=>{
+  const url = new URL(event.request.url);
+  if(url.pathname.endsWith('/exec')){
+    // data: SWR
+    event.respondWith((async ()=>{
       try{
-        const net = await fetch(req);
-        const cache = await caches.open(API_CACHE);
-        cache.put(req, net.clone());
+        const net = await fetch(event.request);
+        const cache = await caches.open('data');
+        cache.put(event.request, net.clone());
         return net;
-      }catch{
-        const cached = await caches.match(req);
-        if(cached) return cached;
-        // fallback kosong jika tidak ada cache
-        return new Response(JSON.stringify({ok:false,error:'offline'}), {headers:{'Content-Type':'application/json'}});
+      }catch(_){
+        const cache = await caches.open('data');
+        const hit = await cache.match(event.request);
+        if(hit) return hit;
+        throw _;
       }
     })());
-    return;
+  }else{
+    event.respondWith(caches.match(event.request).then(r=> r || fetch(event.request)));
   }
-
-  // Assets — stale-while-revalidate
-  e.respondWith((async ()=>{
-    const cache = await caches.open(ASSET_CACHE);
-    const cached = await cache.match(req);
-    const fetchPromise = fetch(req).then(net=>{
-      cache.put(req, net.clone());
-      return net;
-    }).catch(()=> cached);
-    return cached || fetchPromise;
-  })());
 });
