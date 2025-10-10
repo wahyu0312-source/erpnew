@@ -6,7 +6,7 @@
   <title>東京精密発條株式会社システム</title>
   <link rel="icon" href="./assets/tsh.png">
 
-  <!-- Font -->
+  <!-- Font/Icon -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer">
 
   <!-- Styles -->
@@ -131,17 +131,28 @@
     </section>
   </main>
 
-  <!-- Halaman lain (Sales/Plan/Ship/Inventory/Finished/Invoice/Charts) tetap sama seperti sebelumnya -->
-
+  <!-- ダイアログ -->
   <dialog id="dlgStationQR" class="paper">
-    <div class="body"><h3>工程QR（現場掲示用）</h3><p class="muted s">フォーマット: <code>ST:工程名</code></p><div id="qrWrap" class="grid"></div></div>
+    <div class="body">
+      <h3>工程QR（現場掲示用）</h3>
+      <p class="muted s">フォーマット: <code>ST:工程名</code></p>
+      <div id="qrWrap" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));"></div>
+    </div>
     <footer class="row-end"><button class="btn" onclick="document.getElementById('dlgStationQR').close()">閉じる</button></footer>
   </dialog>
 
   <dialog id="dlgScan" class="paper">
-    <div class="body"><h3>QRスキャン更新（PO: <span id="scanPO"></span>）</h3><p class="muted s">工程QRを読み取ると切替され履歴に記録されます。</p>
-      <video id="scanVideo" playsinline></video><canvas id="scanCanvas" class="hidden"></canvas><div id="scanResult" class="muted s" style="margin-top:.5rem"></div></div>
-    <footer class="row-end"><button class="btn ghost" id="btnScanStart">開始</button><button class="btn" id="btnScanClose">閉じる</button></footer>
+    <div class="body">
+      <h3>QRスキャン更新（PO: <span id="scanPO"></span>）</h3>
+      <p class="muted s">工程QRを読み取ると切替され履歴に記録されます。</p>
+      <video id="scanVideo" playsinline></video>
+      <canvas id="scanCanvas" class="hidden"></canvas>
+      <div id="scanResult" class="muted s" style="margin-top:.5rem"></div>
+    </div>
+    <footer class="row-end">
+      <button class="btn ghost" id="btnScanStart">開始</button>
+      <button class="btn" id="btnScanClose">閉じる</button>
+    </footer>
   </dialog>
 </body>
 </html>
