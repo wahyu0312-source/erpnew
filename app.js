@@ -1,24 +1,17 @@
 /* =================================================
-   Frontend JSONP (bebas CORS) + login UI lebih besar
+   Frontend JSONP (bebas CORS)
+   Menu CRUD + Flow + QR Scan + A4 Print
    ================================================= */
-
-/** GANTI dengan Web App URL (akhiran /exec) */
 const API_BASE = "https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec";
+const PROCESS_LIST = ["準備","シャッター溶接","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","出荷（組立済）"];
 
-const PROCESS_LIST = [
-  "準備","シャッター溶接","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","出荷（組立済）"
-];
-
-/* ---------- DOM helpers ---------- */
 const $  = (q,el=document)=> el.querySelector(q);
 const $$ = (q,el=document)=> [...el.querySelectorAll(q)];
 const qs = (o)=> Object.entries(o).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
 const fmt = (d)=> d? new Date(d).toLocaleString("ja-JP"):"";
+const normalizeProc = (s)=> String(s||"").trim().replace("レーサ加工","レザー加工").replace("外作加工","外注加工/組立") || "未設定";
 
-const normalizeProc = (s)=> String(s||"").trim()
-  .replace("レーサ加工","レザー加工").replace("外作加工","外注加工/組立") || "未設定";
-
-/* ---------- JSONP helper (NO CORS) ---------- */
+/* ---------- JSONP ---------- */
 function jsonp(action, params={}){
   return new Promise((resolve,reject)=>{
     const cb = "cb_" + Math.random().toString(36).slice(2);
@@ -31,10 +24,7 @@ function jsonp(action, params={}){
       if(resp && resp.ok) resolve(resp.data);
       else reject(new Error(resp && resp.error || "API error"));
     };
-    s.onerror = ()=>{
-      delete window[cb]; s.remove();
-      reject(new Error("JSONP load error"));
-    };
+    s.onerror = ()=>{ delete window[cb]; s.remove(); reject(new Error("JSONP load error")); };
     document.body.appendChild(s);
   });
 }
@@ -70,7 +60,6 @@ const ROLE_MAP = {
   '製造': { pages:['pageDash'], nav:true },
   '検査': { pages:['pageDash'], nav:true }
 };
-
 function setUser(u){
   CURRENT_USER = u || null;
   $("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "";
@@ -101,23 +90,21 @@ function show(id){
   $("#"+id)?.classList.remove("hidden");
 }
 $("#btnToDash").onclick=()=>{ show("pageDash"); refreshAll(); };
-$("#btnToSales").onclick=()=> show("pageSales");
-$("#btnToPlan").onclick =()=> show("pagePlan");
-$("#btnToShip").onclick =()=> show("pageShip");
-$("#btnToInvPage").onclick=()=> show("pageInventory");
-$("#btnToFinPage").onclick=()=> show("pageFinished");
-$("#btnToInvoice").onclick=()=> show("pageInvoice");
-$("#btnToCharts").onclick =()=> show("pageCharts");
+$("#btnToSales").onclick=()=>{ show("pageSales"); loadSheetToTable(SH.PRODUCTION_ORDERS, '#ordHead','#ordBody','po_id'); };
+$("#btnToPlan").onclick =()=>{ show("pagePlan");  loadSheetToTable(SH.PLANS, '#planHead','#planBody','plan_id'); };
+$("#btnToShip").onclick =()=>{ show("pageShip");  loadSheetToTable(SH.SHIPMENTS, '#shipHead','#shipBody','ship_id'); };
+$("#btnToInvPage").onclick=()=>{ show("pageInventory"); loadSheetToTable(SH.INVENTORY, '#invHead','#invBody','item_code'); };
+$("#btnToFinPage").onclick=()=>{ show("pageFinished"); loadSheetToTable(SH.FINISHED, '#finHead','#finBody','fg_id'); };
+$("#btnToInvoice").onclick=()=>{ show("pageInvoice");  loadSheetToTable(SH.INVOICES, '#invHead2','#invBody2','inv_no'); };
 $("#btnLogout").onclick  =()=> setUser(null);
 
-/* ---------- Login (pakai JSONP) ---------- */
+/* ---------- Login ---------- */
 $("#btnLogin").onclick = async ()=>{
   const u = $("#inUser").value.trim();
   const p = $("#inPass").value.trim();
   if(!u || !p) return alert("ユーザー名 / パスワード を入力してください");
-
   try{
-    await jsonp('ping'); // sanity check
+    await jsonp('ping');
     const me = await jsonp("login", { username:u, password:p });
     setUser(me);
   }catch(e){
@@ -126,7 +113,7 @@ $("#btnLogin").onclick = async ()=>{
   }
 };
 
-/* ---------- Orders & Dashboard ---------- */
+/* ---------- Dashboard (tetap) ---------- */
 async function loadOrders(){
   const list = await jsonp("listOrders");
   const q = ($("#searchQ").value||"").trim().toLowerCase();
@@ -181,7 +168,240 @@ async function loadStats(){
 async function refreshAll(){ await Promise.all([loadOrders(), loadStats()]); }
 $("#btnRefresh").onclick = refreshAll;
 
-/* ---------- Manual update (pakai JSONP) ---------- */
+/* ---------- Generic Sheet Helpers (CRUD) ---------- */
+const SH = {
+  PRODUCTION_ORDERS: 'ProductionOrders',
+  PLANS: 'ProductionPlans',
+  SHIPMENTS: 'Shipments',
+  INVENTORY: 'Inventory',
+  FINISHED: 'FinishedGoods',
+  INVOICES: 'Invoices',
+};
+
+async function loadSheetToTable(sheet, headSel, bodySel, keyCol){
+  const data = await jsonp('listSheet', { sheet });
+  // Render header from keys union
+  const keys = data.length ? Object.keys(data[0]) : [keyCol,'備考'];
+  $(headSel).innerHTML = `<tr>${keys.map(k=>`<th>${k}</th>`).join('')}<th>操作</th></tr>`;
+  const tbody = $(bodySel); tbody.innerHTML = "";
+  data.forEach(row=>{
+    const tr = document.createElement('tr');
+    tr.dataset.key = row[keyCol] || '';
+    tr.innerHTML = keys.map(k=>`<td contenteditable data-k="${k}">${row[k]??''}</td>`).join('')
+      + `<td class="center"><button class="btn ghost btn-del">削除</button></td>`;
+    tbody.appendChild(tr);
+  });
+  // delete
+  $$('.btn-del', tbody).forEach(btn=>{
+    btn.onclick = async (e)=>{
+      const tr = e.currentTarget.closest('tr');
+      const keyVal = tr.dataset.key || tr.querySelector(`[data-k="${keyCol}"]`)?.textContent.trim();
+      if(!keyVal) return alert('キー未設定');
+      if(!confirm('削除しますか？')) return;
+      await jsonp('deleteRow', { sheet, key: keyCol, value: keyVal });
+      tr.remove();
+    };
+  });
+}
+
+function collectTableRows(headSel, bodySel){
+  const headTh = $$( 'th', $(headSel) );
+  const keys = headTh.slice(0,-1).map(th=>th.textContent.trim()); // exclude 操作
+  const rows = [];
+  $$('#'+$(bodySel).id+' tr', $(bodySel).parentElement).forEach(tr=>{
+    const obj = {};
+    $$('td[contenteditable]', tr).forEach(td=>{
+      obj[td.dataset.k] = td.textContent.trim();
+    });
+    rows.push(obj);
+  });
+  return rows;
+}
+
+/* ---------- CSV Export/Import ---------- */
+function downloadCSV(filename, rows){
+  if(!rows.length) return alert('データなし');
+  const keys = Object.keys(rows[0]);
+  const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
+  const csv = [keys.join(','), ...rows.map(r=> keys.map(k=>esc(r[k])).join(','))].join('\r\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+}
+
+async function handleImport(inputEl, targetSheet, headSel, bodySel, keyCol){
+  const file = inputEl.files[0]; if(!file) return;
+  const wb = await file.arrayBuffer().then(ExcelJSread); // helper below
+  const rows = wb.rows; // [{col:val,...}]
+  // render and allow edit before save
+  $(headSel).innerHTML = `<tr>${Object.keys(rows[0]||{[keyCol]:''}).map(k=>`<th>${k}</th>`).join('')}<th>操作</th></tr>`;
+  const tbody = $(bodySel); tbody.innerHTML="";
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.dataset.key = r[keyCol]||'';
+    tr.innerHTML = Object.keys(r).map(k=>`<td contenteditable data-k="${k}">${r[k]??''}</td>`).join('')
+      + `<td class="center"><button class="btn ghost btn-del">削除</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function ExcelJSread(arrayBuffer){
+  // menggunakan SheetJS (XLSX) yang sudah di-load
+  const wb = XLSX.read(arrayBuffer, {type:'array'});
+  const wsName = wb.SheetNames[0];
+  const ws = wb.Sheets[wsName];
+  const json = XLSX.utils.sheet_to_json(ws, {defval:''});
+  return { rows: json };
+}
+
+/* ---------- Toolbar wiring (per menu) ---------- */
+// 受注
+$("#ordCreate").onclick = ()=> {
+  const body = $("#ordBody");
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td contenteditable data-k="po_id"></td>
+  <td contenteditable data-k="得意先"></td>
+  <td contenteditable data-k="品名"></td>
+  <td contenteditable data-k="品番"></td>
+  <td contenteditable data-k="図番"></td>
+  <td contenteditable data-k="qty">0</td>
+  <td contenteditable data-k="status">進行</td>
+  <td contenteditable data-k="current_process">準備</td>
+  <td contenteditable data-k="updated_at"></td>
+  <td contenteditable data-k="updated_by"></td>
+  <td class="center"><button class="btn ghost btn-del">削除</button></td>`;
+  body.prepend(tr);
+};
+$("#ordImport").onchange = ()=> handleImport($("#ordImport"), SH.PRODUCTION_ORDERS, "#ordHead","#ordBody",'po_id');
+$("#ordExport").onclick = async ()=>{
+  const rows = collectTableRows("#ordHead","#ordBody");
+  downloadCSV(`orders_${new Date().toISOString().slice(0,10)}.csv`, rows);
+};
+$("#ordSave").onclick = async ()=>{
+  const rows = collectTableRows("#ordHead","#ordBody");
+  await jsonp('batchUpsert', { sheet:SH.PRODUCTION_ORDERS, key:'po_id', rows: JSON.stringify(rows), user: JSON.stringify(CURRENT_USER||{}) });
+  alert('保存しました'); refreshAll();
+};
+$("#ordPrint").onclick = ()=> window.print();
+
+// 生産計画
+$("#planCreate").onclick = ()=>{
+  const body = $("#planBody");
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td contenteditable data-k="plan_id"></td>
+  <td contenteditable data-k="po_id"></td>
+  <td contenteditable data-k="start_date"></td>
+  <td contenteditable data-k="due_date"></td>
+  <td contenteditable data-k="line"></td>
+  <td contenteditable data-k="note"></td>
+  <td contenteditable data-k="updated_at"></td>
+  <td contenteditable data-k="updated_by"></td>
+  <td class="center"><button class="btn ghost btn-del">削除</button></td>`;
+  body.prepend(tr);
+};
+$("#planImport").onchange = ()=> handleImport($("#planImport"), SH.PLANS, "#planHead","#planBody",'plan_id');
+$("#planExport").onclick = ()=> downloadCSV(`plans_${new Date().toISOString().slice(0,10)}.csv`, collectTableRows("#planHead","#planBody"));
+$("#planSave").onclick = async ()=>{
+  const rows = collectTableRows("#planHead","#planBody");
+  await jsonp('batchUpsert', { sheet:SH.PLANS, key:'plan_id', rows: JSON.stringify(rows), user: JSON.stringify(CURRENT_USER||{}) });
+  alert('保存しました');
+  // Alur: jika ada plan baru, otomatis show di dashboard (data sumber tetap dari sheet)
+  refreshAll();
+};
+$("#planPrint").onclick = ()=> window.print();
+
+// 出荷予定
+$("#shipCreate").onclick = ()=>{
+  const body = $("#shipBody");
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td contenteditable data-k="ship_id"></td>
+  <td contenteditable data-k="po_id"></td>
+  <td contenteditable data-k="scheduled_date"></td>
+  <td contenteditable data-k="qty"></td>
+  <td contenteditable data-k="status">予定</td>
+  <td contenteditable data-k="created_at"></td>
+  <td contenteditable data-k="created_by"></td>
+  <td class="center"><button class="btn ghost btn-del">削除</button></td>`;
+  body.prepend(tr);
+};
+$("#shipImport").onchange = ()=> handleImport($("#shipImport"), SH.SHIPMENTS, "#shipHead","#shipBody",'ship_id');
+$("#shipExport").onclick = ()=> downloadCSV(`shipments_${new Date().toISOString().slice(0,10)}.csv`, collectTableRows("#shipHead","#shipBody"));
+$("#shipSave").onclick = async ()=>{
+  const rows = collectTableRows("#shipHead","#shipBody");
+  await jsonp('batchUpsert', { sheet:SH.SHIPMENTS, key:'ship_id', rows: JSON.stringify(rows), user: JSON.stringify(CURRENT_USER||{}) });
+  alert('保存しました'); refreshAll();
+};
+$("#shipPrint").onclick = ()=> window.print();
+
+// 在庫
+$("#invCreate").onclick = ()=>{
+  const body = $("#invBody");
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td contenteditable data-k="item_code"></td>
+  <td contenteditable data-k="品名"></td>
+  <td contenteditable data-k="在庫数">0</td>
+  <td contenteditable data-k="loc"></td>
+  <td contenteditable data-k="updated_at"></td>
+  <td contenteditable data-k="updated_by"></td>
+  <td class="center"><button class="btn ghost btn-del">削除</button></td>`;
+  body.prepend(tr);
+};
+$("#invImport").onchange = ()=> handleImport($("#invImport"), SH.INVENTORY, "#invHead","#invBody",'item_code');
+$("#invExport").onclick = ()=> downloadCSV(`inventory_${new Date().toISOString().slice(0,10)}.csv`, collectTableRows("#invHead","#invBody"));
+$("#invSave").onclick = async ()=>{
+  const rows = collectTableRows("#invHead","#invBody");
+  await jsonp('batchUpsert', { sheet:SH.INVENTORY, key:'item_code', rows: JSON.stringify(rows), user: JSON.stringify(CURRENT_USER||{}) });
+  alert('保存しました'); refreshAll();
+};
+$("#invPrint").onclick = ()=> window.print();
+
+// 完成品一覧
+$("#finCreate").onclick = ()=>{
+  const body = $("#finBody");
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td contenteditable data-k="fg_id"></td>
+  <td contenteditable data-k="po_id"></td>
+  <td contenteditable data-k="qty">0</td>
+  <td contenteditable data-k="検査結果"></td>
+  <td contenteditable data-k="status"></td>
+  <td contenteditable data-k="updated_at"></td>
+  <td contenteditable data-k="updated_by"></td>
+  <td class="center"><button class="btn ghost btn-del">削除</button></td>`;
+  body.prepend(tr);
+};
+$("#finImport").onchange = ()=> handleImport($("#finImport"), SH.FINISHED, "#finHead","#finBody",'fg_id');
+$("#finExport").onclick = ()=> downloadCSV(`finished_${new Date().toISOString().slice(0,10)}.csv`, collectTableRows("#finHead","#finBody"));
+$("#finSave").onclick = async ()=>{
+  const rows = collectTableRows("#finHead","#finBody");
+  await jsonp('batchUpsert', { sheet:SH.FINISHED, key:'fg_id', rows: JSON.stringify(rows), user: JSON.stringify(CURRENT_USER||{}) });
+  alert('保存しました'); refreshAll();
+};
+$("#finPrint").onclick = ()=> window.print();
+
+// 請求書
+$("#invCreate2").onclick = ()=>{
+  const body = $("#invBody2");
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td contenteditable data-k="inv_no"></td>
+  <td contenteditable data-k="po_id"></td>
+  <td contenteditable data-k="得意先"></td>
+  <td contenteditable data-k="金額JPY">0</td>
+  <td contenteditable data-k="発行日"></td>
+  <td contenteditable data-k="担当"></td>
+  <td contenteditable data-k="備考"></td>
+  <td class="center"><button class="btn ghost btn-del">削除</button></td>`;
+  body.prepend(tr);
+};
+$("#invImport2").onchange = ()=> handleImport($("#invImport2"), SH.INVOICES, "#invHead2","#invBody2",'inv_no');
+$("#invExport2").onclick = ()=> downloadCSV(`invoices_${new Date().toISOString().slice(0,10)}.csv`, collectTableRows("#invHead2","#invBody2"));
+$("#invSave2").onclick = async ()=>{
+  const rows = collectTableRows("#invHead2","#invBody2");
+  await jsonp('batchUpsert', { sheet:SH.INVOICES, key:'inv_no', rows: JSON.stringify(rows), user: JSON.stringify(CURRENT_USER||{}) });
+  alert('保存しました');
+};
+$("#invPrint2").onclick = ()=> window.print();
+
+/* ---------- Manual update dialog (tetap) ---------- */
 function ensureManualDialog(){
   if($("#dlgManual")) return;
   const dlg = document.createElement("dialog");
@@ -227,7 +447,7 @@ async function saveManual(){
   $("#dlgManual").close(); await refreshAll();
 }
 
-/* ---------- Station QR (設定 → 工程QR) ---------- */
+/* ---------- Station QR ---------- */
 $("#miStationQR")?.addEventListener("click", ()=>{
   const dlg = $("#dlgStationQR");
   const wrap = $("#qrWrap"); wrap.innerHTML = "";
@@ -241,64 +461,95 @@ $("#miStationQR")?.addEventListener("click", ()=>{
     txt.innerHTML = `<b>${normalizeProc(p)}</b><div class="muted s">ST:${normalizeProc(p)}</div>`;
     box.appendChild(txt);
     wrap.appendChild(box);
-    // qrcodejs
-    /* global QRCode */
     new QRCode(qrDiv, { text:`ST:${normalizeProc(p)}`, width:96, height:96 });
   });
   dlg.showModal();
 });
 
-/* ---------- Scanner dialog skeleton (optional to wire later) ---------- */
+/* ---------- QR Camera Decode (jsQR) ---------- */
+let scanStream=null, scanRaf=null;
+async function startScan(){
+  const video=$("#scanVideo"), canvas=$("#scanCanvas"), ctx=canvas.getContext('2d');
+  if(scanStream){ stopScan(); }
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = scanStream; await video.play();
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    const loop = async ()=>{
+      if(video.readyState===video.HAVE_ENOUGH_DATA){
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
+        const img = ctx.getImageData(0,0,canvas.width,canvas.height);
+        const code = jsQR(img.data, img.width, img.height);
+        if(code && code.data){
+          $("#scanResult").textContent = code.data;
+          // payload: "ST:工程名" atau "PO:xxx:工程"
+          const txt = code.data.trim();
+          if(/^ST:/.test(txt)){
+            const proc = txt.slice(3);
+            const po = $("#scanPO").textContent.trim();
+            if(po){
+              await jsonp("setProcess", {
+                po_id: po,
+                updates: JSON.stringify({ current_process: normalizeProc(proc), status: '進行', note:'QR Scan' }),
+                user: JSON.stringify(CURRENT_USER||{})
+              });
+              alert(`更新: ${po} → ${proc}`);
+              refreshAll(); stopScan();
+            }
+          }else if(/^PO:/i.test(txt)){
+            const parts = txt.split(':'); // PO:xxxx:工程名(opsional)
+            const po = parts[1]; const proc = parts[2]||'';
+            $("#scanPO").textContent = po;
+            if(proc){
+              await jsonp("setProcess", {
+                po_id: po,
+                updates: JSON.stringify({ current_process: normalizeProc(proc), status:'進行', note:'QR Scan' }),
+                user: JSON.stringify(CURRENT_USER||{})
+              });
+              alert(`更新: ${po} → ${proc}`); refreshAll(); stopScan();
+            }
+          }
+        }
+      }
+      scanRaf = requestAnimationFrame(loop);
+    };
+    loop();
+  }catch(e){
+    $("#scanResult").textContent = 'カメラ起動失敗: '+e;
+  }
+}
+function stopScan(){
+  if(scanRaf) cancelAnimationFrame(scanRaf), scanRaf=null;
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream=null; }
+}
+$("#btnScanStart").onclick = startScan;
+$("#btnScanClose").onclick = ()=>{ stopScan(); $("#dlgScan").close(); };
+
 function openScanDialog(po){
-  $("#scanPO").textContent = po;
+  $("#scanPO").textContent = po||'';
+  $("#scanResult").textContent = '';
   $("#dlgScan").showModal();
 }
-$("#btnScanClose")?.addEventListener("click", ()=> $("#dlgScan").close());
 
-/* ---------- Weather (no key, Open-Meteo + reverse geocode) ---------- */
+/* ---------- Weather (no key) ---------- */
 async function initWeather(){
   const cityEl=$("#wxCity"), iconEl=$("#wxIcon"), tempEl=$("#wxTemp");
-  const iconFor = (code)=>{
-    // Simple mapping
-    if([0].includes(code)) return "☀️";
-    if([1,2,3].includes(code)) return "⛅";
-    if([45,48].includes(code)) return "🌫️";
-    if([51,53,55,61,63,65,80,81,82].includes(code)) return "🌧️";
-    if([56,57,66,67,71,73,75,77,85,86].includes(code)) return "🌨️";
-    if([95,96,99].includes(code)) return "⛈️";
-    return "🌡️";
-  };
+  const iconFor = (code)=> code===0?'☀️':[1,2,3].includes(code)?'⛅':[45,48].includes(code)?'🌫️':[51,53,55,61,63,65,80,81,82].includes(code)?'🌧️':[95,96,99].includes(code)?'⛈️':'🌡️';
   try{
-    // cari lokasi
     let lat=35.6812, lon=139.7671, city="東京";
     if(navigator.geolocation){
-      await new Promise((res)=> {
-        navigator.geolocation.getCurrentPosition(p=>{
-          lat=p.coords.latitude; lon=p.coords.longitude; res();
-        }, ()=>res(), {timeout:2500});
-      });
+      await new Promise((res)=> navigator.geolocation.getCurrentPosition(p=>{lat=p.coords.latitude;lon=p.coords.longitude;res();}, ()=>res(), {timeout:2500}));
     }
-    // reverse geocode (tanpa key)
     try{
       const r = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=ja`);
-      if(r.ok){
-        const j = await r.json();
-        city = j.city || j.locality || j.principalSubdivision || "現在地";
-      }
+      if(r.ok){ const j = await r.json(); city = j.city || j.locality || j.principalSubdivision || "現在地"; }
     }catch(_){}
-    // weather
     const w = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`);
     const j = await w.json();
     const t = Math.round(j?.current?.temperature_2m ?? 0);
     const code = j?.current?.weather_code ?? -1;
-    cityEl.textContent = city;
-    iconEl.textContent = iconFor(code);
-    tempEl.textContent = `${t}℃`;
-  }catch(e){
-    cityEl.textContent = "取得失敗";
-    iconEl.textContent = "—";
-    tempEl.textContent = "--℃";
-  }
+    cityEl.textContent = city; iconEl.textContent = iconFor(code); tempEl.textContent = `${t}℃`;
+  }catch(e){ cityEl.textContent = "取得失敗"; iconEl.textContent = "—"; tempEl.textContent = "--℃"; }
 }
 
 /* ---------- Init ---------- */
@@ -306,3 +557,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
   setUser(null);
   initWeather();
 });
+
+/* ---------- Flow helper: Orders -> Plan -> Dashboard -> Shipment ---------- */
+/* Gunakan tombol Save di masing-masing page. Data otomatis tampil di Dashboard
+   karena sumbernya sama (Sheet yang sama) dan dashboard refresh setelah Save. */
