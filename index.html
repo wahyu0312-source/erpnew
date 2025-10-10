@@ -6,10 +6,10 @@
   <title>東京精密発條株式会社システム</title>
   <link rel="icon" href="assets/tsh.png">
 
-  <!-- Font Awesome (tanpa integrity agar tidak diblok Edge/CDN mismatch) -->
+  <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 
-  <!-- App styles -->
+  <!-- Styles -->
   <link rel="stylesheet" href="style.css">
 
   <!-- Libs -->
@@ -20,16 +20,6 @@
 
   <!-- App -->
   <script defer src="app.js"></script>
-
-  <!-- (Opsional) styling kecil untuk weather pill -->
-  <style>
-    .wx-pill{display:inline-flex;align-items:center;gap:.6rem;padding:.5rem .8rem;border-radius:999px;border:1px solid rgba(0,0,0,.08);background:linear-gradient(180deg,#ffffff 0%, #f8fafc 100%);color:#0f172a; box-shadow:0 6px 18px rgba(2,6,23,.08), inset 0 1px 0 #fff;min-height:40px; max-width:60vw;}
-    .wx-city{font-size:.9rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .wx-temp{font-weight:900;letter-spacing:.02em}
-    .wx-ico{width:22px;height:22px;display:inline-block}
-    .wx-dot{width:6px;height:6px;border-radius:50%;background:#93c5fd;opacity:.9}
-    @media (max-width:760px){ .wx-pill{order:-1} }
-  </style>
 </head>
 <body>
   <!-- NAV -->
@@ -38,31 +28,23 @@
       <img src="assets/tsh.png" class="logo" alt="">
       <span class="brand">東京精密発條株式会社システム</span>
     </div>
-    <div id="weather" class="wx-pill" title="現在の天気">
-      <span id="wxCity" class="wx-city">取得中…</span>
-      <span class="wx-dot"></span>
-      <span id="wxIcon" class="wx-ico"></span>
-      <span id="wxTemp" class="wx-temp">--℃</span>
-    </div>
     <div class="nav-right">
-      <button id="btnToDash" class="btn ghost hidden"><i class="fa-solid fa-gauge"></i> ダッシュボード</button>
-      <button id="btnToPlan" class="btn ghost hidden"><i class="fa-solid fa-list-check"></i> 生産現品票</button>
-      <button id="btnToShip" class="btn ghost hidden"><i class="fa-solid fa-truck"></i> 出荷予定</button>
-      <button id="btnToCharts" class="btn ghost hidden"><i class="fa-solid fa-chart-simple"></i> 統計</button>
-      <button id="btnLogout" class="btn ghost hidden"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
+      <button id="btnToDash"   class="btn ghost hidden"><i class="fa-solid fa-gauge"></i> ダッシュボード</button>
+      <button id="btnToCharts" class="btn ghost hidden"><i class="fa-solid fa-chart-simple"></i> Chart</button>
+      <button id="btnLogout"   class="btn ghost hidden"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
       <span id="userInfo" class="muted"></span>
     </div>
   </nav>
 
   <!-- LOGIN -->
   <main id="authView" class="container">
-    <section class="card" style="max-width:520px;margin:2rem auto">
+    <section class="card card-tight">
       <header><h3><i class="fa-solid fa-right-to-bracket"></i> ログイン</h3></header>
       <div class="grid">
         <input id="inUser" placeholder="ユーザーID">
         <input id="inPass" placeholder="パスワード" type="password">
-        <label class="row-start"><input id="inRemember" type="checkbox"> <span>ログイン状態を保持</span></label>
-        <button id="btnLogin" class="btn primary">ログイン</button>
+        <label class="row"><input id="inRemember" type="checkbox"> <span>ログイン状態を保持</span></label>
+        <button id="btnLogin" class="btn">ログイン</button>
       </div>
     </section>
   </main>
@@ -73,72 +55,51 @@
       <h2><i class="fa-solid fa-gauge"></i> 生産ダッシュボード</h2>
       <div class="row gap">
         <button id="btnOpenScan" class="btn"><i class="fa-solid fa-qrcode"></i> スキャン</button>
+        <details class="dropdown-inline">
+          <summary class="btn ghost"><i class="fa-solid fa-qrcode"></i> Station QR <i class="fa-solid fa-caret-down caret"></i></summary>
+          <div id="stationQrMenu" class="menu"></div>
+        </details>
+        <input id="fileImportOrders" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+        <button id="btnImportOrders" class="btn ghost"><i class="fa-solid fa-file-arrow-up"></i> Import</button>
+        <button id="btnExportOrders" class="btn"><i class="fa-solid fa-file-arrow-down"></i> Export</button>
       </div>
     </header>
 
-    <section class="grid-2">
+    <!-- Snapshot + Defect mini chart -->
+    <section class="grid-3">
       <div class="tile">
         <div class="muted s">当日スナップショット</div>
-        <div class="row-around big">
-          <div><strong id="ssTickets">0</strong><div class="muted s">現品票（件）</div></div>
-          <div><strong id="ssDone">0</strong><div class="muted s">完了（件）</div></div>
-          <div><strong id="ssOk">0</strong><div class="muted s">OK品（個）</div></div>
-          <div><strong id="ssNg">0</strong><div class="muted s">不良品（個）</div></div>
+        <div class="grid-3">
+          <div><div class="stat-num" id="ssTickets">0</div><div class="muted s">現品票</div></div>
+          <div><div class="stat-num" id="ssOk">0</div><div class="muted s">OK品</div></div>
+          <div><div class="stat-num" id="ssNg">0</div><div class="muted s">不良品</div></div>
         </div>
       </div>
-      <div class="tile">
-        <div class="muted s">工程別 不良品</div>
-        <div style="height:240px"><canvas id="chDefectByProc"></canvas></div>
+      <div class="tile" style="grid-column: span 2">
+        <div class="row-between">
+          <div class="muted s">現品票一覧</div>
+          <input id="qOrders" class="input" placeholder="検索…">
+        </div>
+        <div id="tblOrders" class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>注番</th><th>得意先</th><th>図番</th><th>機種</th><th>商品名</th>
+                <th>数量</th><th>工程</th><th>状態</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyOrders"><tr><td colspan="9" class="muted">読み込み中…</td></tr></tbody>
+          </table>
+        </div>
       </div>
     </section>
   </main>
 
-  <!-- 生産現品票（入力 cepat minimal untuk demo） -->
-  <main id="pagePlan" class="container hidden">
-    <header><h3><i class="fa-solid fa-list-check"></i> 生産現品票</h3></header>
-    <section class="card">
-      <div class="grid">
-        <input id="c_po" placeholder="注番（編集用）">
-        <input id="c_tokui" placeholder="得意先">
-        <input id="c_zuban" placeholder="図番">
-        <input id="c_kishu" placeholder="機種（=品番）">
-        <input id="c_hinmei" placeholder="商品名（=品名）">
-        <input id="c_qty" type="number" min="0" placeholder="数量">
-        <input id="c_biko" placeholder="備考">
-        <button id="btnCreateOrder" class="btn">登録/更新</button>
-      </div>
-    </section>
-
-    <section class="card">
-      <header class="row-between">
-        <h4>現品票一覧</h4>
-        <input id="qOrders" class="input" placeholder="検索…">
-      </header>
-      <div id="tblOrders" class="table"></div>
-    </section>
-  </main>
-
-  <!-- 出荷予定（minimal） -->
-  <main id="pageShip" class="container hidden">
-    <header><h3><i class="fa-solid fa-truck"></i> 出荷予定</h3></header>
-    <section class="card">
-      <div class="grid">
-        <input id="s_po" placeholder="注番">
-        <input id="s_date" type="date" placeholder="出荷日">
-        <input id="s_qty"  type="number" min="0" placeholder="数量">
-        <input id="s_dest" placeholder="送り先">
-        <input id="s_cust" placeholder="得意先">
-        <input id="s_note" placeholder="備考">
-        <button id="btnSchedule" class="btn">登録</button>
-      </div>
-    </section>
-  </main>
-
-  <!-- 統計 -->
+  <!-- CHART PAGE -->
   <main id="pageCharts" class="container hidden">
     <section class="card">
       <header class="row-between">
-        <h3><i class="fa-solid fa-chart-simple"></i> 統計</h3>
+        <h3><i class="fa-solid fa-chart-simple"></i> 工程チャート</h3>
         <button id="btnChartsRefresh" class="btn ghost"><i class="fa-solid fa-rotate"></i> 更新</button>
       </header>
       <div class="grid-3">
@@ -171,7 +132,33 @@
     </footer>
   </dialog>
 
-  <!-- Dialog kecil: Ticket detail (opsional, bisa diisi nanti) -->
+  <!-- Dialog: 更新 (manual) -->
+  <dialog id="dlgUpdate" class="paper">
+    <div class="body">
+      <h3>現品票 更新（PO: <span id="updPO"></span>）</h3>
+      <div class="grid">
+        <select id="updProcess"></select>
+        <input id="updOk" type="number" min="0" placeholder="OK品 数量">
+        <input id="updNg" type="number" min="0" placeholder="不良品 数量">
+        <input id="updNote" placeholder="メモ/備考（任意）">
+      </div>
+    </div>
+    <footer class="row-end">
+      <button id="btnUpdSave" class="btn"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
+      <button id="btnUpdClose" class="btn ghost">閉じる</button>
+    </footer>
+  </dialog>
 
+  <!-- Dialog: Station QR -->
+  <dialog id="dlgStationQR" class="paper">
+    <div class="body">
+      <h3>Station QR: <span id="qrStationName"></span></h3>
+      <div id="qrBox" style="display:flex;justify-content:center;padding:12px"></div>
+      <div class="muted s">フォーマット: <code>ST:&lt;station_name&gt;</code></div>
+    </div>
+    <footer class="row-end">
+      <button id="btnQrClose" class="btn">閉じる</button>
+    </footer>
+  </dialog>
 </body>
 </html>
