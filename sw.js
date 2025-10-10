@@ -3,6 +3,7 @@ self.addEventListener('activate', e=> clients.claim());
 
 const STATIC = 'static-v1';
 const ASSETS = ['/', '/index.html', '/style.css', '/app.js', '/assets/tsh.png'];
+
 self.addEventListener('install', e=>{
   e.waitUntil(caches.open(STATIC).then(c=> c.addAll(ASSETS)));
 });
