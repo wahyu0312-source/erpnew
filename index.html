@@ -5,160 +5,36 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>東京精密発條株式会社システム</title>
   <link rel="icon" href="assets/tsh.png">
-
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-
-  <!-- Styles -->
   <link rel="stylesheet" href="style.css">
 
-  <!-- Libs -->
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <!-- React (tanpa build) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- App -->
-  <script defer src="app.js"></script>
+  <!-- Libs -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <script defer src="app.js" type="text/babel"></script>
 </head>
 <body>
-  <!-- NAV -->
   <nav class="nav">
     <div class="nav-left">
-      <img src="assets/tsh.png" class="logo" alt="">
+      <img class="logo" src="assets/tsh.png" alt="">
       <span class="brand">東京精密発條株式会社システム</span>
     </div>
     <div class="nav-right">
-      <button id="btnToDash"   class="btn ghost hidden"><i class="fa-solid fa-gauge"></i> ダッシュボード</button>
-      <button id="btnToCharts" class="btn ghost hidden"><i class="fa-solid fa-chart-simple"></i> Chart</button>
-      <button id="btnLogout"   class="btn ghost hidden"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
-      <span id="userInfo" class="muted"></span>
+      <a href="#/dash"   class="btn pill">ダッシュボード</a>
+      <a href="#/ship"   class="btn pill ghost">出荷予定</a>
+      <a href="#/tickets" class="btn pill ghost">生産現品票</a>
+      <a href="#/stock"  class="btn pill ghost">在庫</a>
+      <a href="#/finished" class="btn pill ghost">完成品一覧</a>
+      <a href="#/chart"  class="btn pill ghost">Chart</a>
     </div>
   </nav>
 
-  <!-- LOGIN -->
-  <main id="authView" class="container">
-    <section class="card card-tight">
-      <header><h3><i class="fa-solid fa-right-to-bracket"></i> ログイン</h3></header>
-      <div class="grid">
-        <input id="inUser" placeholder="ユーザーID">
-        <input id="inPass" placeholder="パスワード" type="password">
-        <label class="row"><input id="inRemember" type="checkbox"> <span>ログイン状態を保持</span></label>
-        <button id="btnLogin" class="btn">ログイン</button>
-      </div>
-    </section>
-  </main>
-
-  <!-- DASHBOARD -->
-  <main id="pageDash" class="container hidden">
-    <header class="row-between">
-      <h2><i class="fa-solid fa-gauge"></i> 生産ダッシュボード</h2>
-      <div class="row gap">
-        <button id="btnOpenScan" class="btn"><i class="fa-solid fa-qrcode"></i> スキャン</button>
-        <details class="dropdown-inline">
-          <summary class="btn ghost"><i class="fa-solid fa-qrcode"></i> Station QR <i class="fa-solid fa-caret-down caret"></i></summary>
-          <div id="stationQrMenu" class="menu"></div>
-        </details>
-        <input id="fileImportOrders" type="file" accept=".xlsx,.xls,.csv" class="hidden">
-        <button id="btnImportOrders" class="btn ghost"><i class="fa-solid fa-file-arrow-up"></i> Import</button>
-        <button id="btnExportOrders" class="btn"><i class="fa-solid fa-file-arrow-down"></i> Export</button>
-      </div>
-    </header>
-
-    <!-- Snapshot + Defect mini chart -->
-    <section class="grid-3">
-      <div class="tile">
-        <div class="muted s">当日スナップショット</div>
-        <div class="grid-3">
-          <div><div class="stat-num" id="ssTickets">0</div><div class="muted s">現品票</div></div>
-          <div><div class="stat-num" id="ssOk">0</div><div class="muted s">OK品</div></div>
-          <div><div class="stat-num" id="ssNg">0</div><div class="muted s">不良品</div></div>
-        </div>
-      </div>
-      <div class="tile" style="grid-column: span 2">
-        <div class="row-between">
-          <div class="muted s">現品票一覧</div>
-          <input id="qOrders" class="input" placeholder="検索…">
-        </div>
-        <div id="tblOrders" class="table-wrap">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>注番</th><th>得意先</th><th>図番</th><th>機種</th><th>商品名</th>
-                <th>数量</th><th>工程</th><th>状態</th><th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="tbodyOrders"><tr><td colspan="9" class="muted">読み込み中…</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- CHART PAGE -->
-  <main id="pageCharts" class="container hidden">
-    <section class="card">
-      <header class="row-between">
-        <h3><i class="fa-solid fa-chart-simple"></i> 工程チャート</h3>
-        <button id="btnChartsRefresh" class="btn ghost"><i class="fa-solid fa-rotate"></i> 更新</button>
-      </header>
-      <div class="grid-3">
-        <div class="tile"><div class="muted s">工程内WIP</div><div style="height:220px"><canvas id="chWipProc"></canvas></div></div>
-        <div class="tile"><div class="muted s">営業 受注数</div><div style="height:220px"><canvas id="chSales"></canvas></div></div>
-        <div class="tile"><div class="muted s">生産計画 作成数</div><div style="height:220px"><canvas id="chPlan"></canvas></div></div>
-      </div>
-      <div class="grid-3" style="margin-top:1rem">
-        <div class="tile"><div class="muted s">不良品（工程別）</div><div style="height:220px"><canvas id="chDefects"></canvas></div></div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Dialog: Scan QR + OK/NG -->
-  <dialog id="dlgScan" class="paper">
-    <div class="body">
-      <h3>QRスキャン更新（PO: <span id="scanPO"></span>）</h3>
-      <video id="scanVideo" playsinline></video>
-      <canvas id="scanCanvas" class="hidden"></canvas>
-      <div class="grid" style="margin-top:.5rem">
-        <input id="inOkQty" type="number" min="0" placeholder="OK品 数量">
-        <input id="inNgQty" type="number" min="0" placeholder="不良品 数量">
-        <input id="inNote" placeholder="メモ/備考（任意）">
-      </div>
-      <div id="scanResult" class="muted s" style="margin-top:.5rem"></div>
-    </div>
-    <footer class="row-end">
-      <button id="btnScanStart" class="btn ghost">開始</button>
-      <button id="btnScanClose" class="btn">閉じる</button>
-    </footer>
-  </dialog>
-
-  <!-- Dialog: 更新 (manual) -->
-  <dialog id="dlgUpdate" class="paper">
-    <div class="body">
-      <h3>現品票 更新（PO: <span id="updPO"></span>）</h3>
-      <div class="grid">
-        <select id="updProcess"></select>
-        <input id="updOk" type="number" min="0" placeholder="OK品 数量">
-        <input id="updNg" type="number" min="0" placeholder="不良品 数量">
-        <input id="updNote" placeholder="メモ/備考（任意）">
-      </div>
-    </div>
-    <footer class="row-end">
-      <button id="btnUpdSave" class="btn"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
-      <button id="btnUpdClose" class="btn ghost">閉じる</button>
-    </footer>
-  </dialog>
-
-  <!-- Dialog: Station QR -->
-  <dialog id="dlgStationQR" class="paper">
-    <div class="body">
-      <h3>Station QR: <span id="qrStationName"></span></h3>
-      <div id="qrBox" style="display:flex;justify-content:center;padding:12px"></div>
-      <div class="muted s">フォーマット: <code>ST:&lt;station_name&gt;</code></div>
-    </div>
-    <footer class="row-end">
-      <button id="btnQrClose" class="btn">閉じる</button>
-    </footer>
-  </dialog>
+  <main id="root" class="container"></main>
 </body>
 </html>
