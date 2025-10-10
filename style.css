@@ -53,6 +53,8 @@ dialog.paper::backdrop{background:rgba(15,23,42,.45)}
 dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
 .corner-brand{position:fixed;right:14px;bottom:12px;z-index:40;color:#0f172a;opacity:.65;font-weight:700;text-decoration:none;background:#fff;border:1px solid var(--border);padding:.35rem .6rem;border-radius:999px;box-shadow:var(--shadow)}
 .corner-brand:hover{opacity:1}
+
+/* PRINT A4 */
 @media print {
   @page{size:A4 portrait;margin:12mm}
   .nav,.corner-brand,.btn,.dropdown-inline,#weather{display:none!important}
@@ -60,8 +62,8 @@ dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
   .card{box-shadow:none;border:none;padding:0}
   table.table{font-size:12px}
   .table th,.table td{padding:.3rem .35rem}
+  thead th{background:#fff!important;color:#000!important;border-bottom:1px solid #000}
 }
-/* ==== Login: bigger, high-contrast ==== */
 #authView .card { max-width: 520px; padding: 1.25rem 1.25rem 1.1rem; }
 #authView h2 { font-size: 1.35rem; margin-top: .2rem; margin-bottom: .9rem; }
 #authView .grid { display: grid; grid-template-columns: 1fr !important; gap: .9rem; }
