@@ -1,167 +1,138 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>東京精密発條株式会社システム</title>
-  <link rel="icon" href="assets/tsh.png">
-  <link rel="stylesheet" href="style.css">
-  <!-- libs optional -->
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-  <script defer src="app.js"></script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>東京精密発條株式会社システム</title>
+<link rel="icon" href="assets/tsh.png" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="style.css" />
+<script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script defer src="app.js"></script>
 </head>
 <body>
 
-  <!-- ======== NAV (tersembunyi sebelum login) ======== -->
-  <nav id="nav" class="nav hide">
-    <div class="nav-left">
-      <img src="assets/tsh.png" class="logo" alt="">
-      <span class="brand">東京精密発條株式会社システム</span>
-    </div>
+<nav class="nav">
+  <div class="nav-left">
+    <img src="assets/tsh.png" class="logo" alt="" />
+    <span class="brand">東京精密発條株式会社システム</span>
+  </div>
 
-    <div class="wx-pill" id="wx" title="現在の天気">
-      <span id="wxCity" class="wx-city">--</span>
-      <span class="wx-dot" aria-hidden="true"></span>
-      <span id="wxTemp" class="wx-temp">--℃</span>
-    </div>
+  <!-- Cuaca -->
+  <div id="weather" class="wx-pill" aria-live="polite">
+    <span id="wxCity" class="wx-city">取得中…</span>
+    <span class="wx-dot"></span>
+    <span id="wxIcon" class="wx-ico"></span>
+    <span id="wxTemp" class="wx-temp">--℃</span>
+  </div>
 
-    <div class="nav-right">
-      <!-- Tombol ditampilkan sesuai role -->
-      <button class="btn ghost menu hide" data-menu="dash"      data-roles="営業,生産管理,製造,検査,admin">ダッシュボード</button>
-      <button class="btn ghost menu hide" data-menu="sales"     data-roles="営業,admin">受注（営業）</button>
-      <button class="btn ghost menu hide" data-menu="plan"      data-roles="生産管理,admin">生産計画</button>
-      <button class="btn ghost menu hide" data-menu="ship"      data-roles="生産管理,admin">出荷予定</button>
-      <button class="btn ghost menu hide" data-menu="inv"       data-roles="生産管理,admin">在庫</button>
-      <button class="btn ghost menu hide" data-menu="fin"       data-roles="生産管理,admin">完成品一覧</button>
-      <button class="btn ghost menu hide" data-menu="invoice"   data-roles="営業,admin">請求書</button>
-      <button class="btn ghost menu hide" data-menu="charts"    data-roles="営業,生産管理,製造,検査,admin">統計</button>
+  <!-- Menu; DISABLED saat belum login -->
+  <div class="nav-right" id="navRight" aria-disabled="true">
+    <button class="btn ghost navbtn" data-goto="pageDash"><i class="fa-solid fa-gauge"></i> ダッシュボード</button>
+    <button class="btn ghost navbtn role-営業" data-goto="pageSales"><i class="fa-regular fa-handshake"></i> 受注（営業）</button>
+    <button class="btn ghost navbtn role-生産管理" data-goto="pagePlan"><i class="fa-solid fa-list-check"></i> 生産計画</button>
+    <button class="btn ghost navbtn role-生産管理" data-goto="pageShip"><i class="fa-solid fa-truck"></i> 出荷予定</button>
+    <button class="btn ghost navbtn role-生産管理" data-goto="pageInventory"><i class="fa-solid fa-boxes-stacked"></i> 在庫</button>
+    <button class="btn ghost navbtn role-生産管理" data-goto="pageFinished"><i class="fa-regular fa-square-check"></i> 完成品一覧</button>
+    <button class="btn ghost navbtn role-営業" data-goto="pageInvoice"><i class="fa-regular fa-file-lines"></i> 請求書</button>
+    <button class="btn ghost navbtn" data-goto="pageCharts"><i class="fa-solid fa-chart-simple"></i> 統計</button>
 
-      <details id="ddSetting" class="dropdown-inline hide">
-        <summary class="btn ghost">設定</summary>
-        <div class="menu-panel">
-          <button id="miStationQR" class="menu-item" data-roles="生産管理,製造,検査,admin">工程QR</button>
-          <button id="miAddUser"  class="menu-item" data-roles="admin">ユーザー追加</button>
-          <button id="miChangePass" class="menu-item" data-roles="営業,生産管理,製造,検査,admin">パス変更</button>
-          <hr>
-          <button id="btnLogout" class="menu-item">ログアウト</button>
-        </div>
-      </details>
-
-      <span id="userInfo" class="muted"></span>
-    </div>
-  </nav>
-
-  <!-- ======== LOGIN ======== -->
-  <main id="authView" class="container">
-    <section class="card card-tight">
-      <h2>ログイン</h2>
-      <div class="grid">
-        <input id="inUser" placeholder="ユーザー名">
-        <input id="inPass" type="password" placeholder="パスワード">
+    <details class="dropdown-inline" id="ddSetting">
+      <summary class="btn ghost"><i class="fa-solid fa-gear"></i> 設定 <i class="fa-solid fa-caret-down caret"></i></summary>
+      <div class="menu right">
+        <button id="miStationQR" class="menu-item"><i class="fa-solid fa-qrcode"></i> 工程QR</button>
+        <button id="miAddUser" class="menu-item admin-only"><i class="fa-solid fa-user-plus"></i> ユーザー追加</button>
+        <button id="miChangePass" class="menu-item"><i class="fa-solid fa-key"></i> パス変更</button>
+        <hr />
+        <button id="btnLogout" class="menu-item"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
       </div>
-      <details class="card">
-        <summary><strong>管理者: ユーザー追加</strong></summary>
-        <div class="grid">
-          <input id="nuUser" placeholder="ユーザー名">
-          <input id="nuPass" type="password" placeholder="パスワード">
-          <input id="nuName" placeholder="氏名">
-          <select id="nuDept">
-            <option value="営業">営業</option>
-            <option value="生産管理">生産管理</option>
-            <option value="製造">製造</option>
-            <option value="検査">検査</option>
-          </select>
-          <select id="nuRole">
-            <option value="member">member</option>
-            <option value="manager">manager</option>
-            <option value="admin">admin</option>
-          </select>
-        </div>
-        <button id="btnNewUser" class="btn ghost full">ユーザー追加</button>
-        <p class="muted s">初回: <code>admin / admin123</code></p>
-      </details>
-      <button id="btnLogin" class="btn primary full">ログイン</button>
-    </section>
-  </main>
+    </details>
+    <span id="userInfo" class="muted"></span>
+  </div>
+</nav>
 
-  <!-- ======== PAGES ======== -->
-  <main id="pageDash" class="container hide">
-    <section class="card">
-      <header class="row-between">
-        <h3>オーダー一覧</h3>
-        <div class="row gap">
-          <input id="qOrders" placeholder="検索..." class="input">
-          <button id="btnExportOrders" class="btn ghost">注文CSV</button>
-          <button id="btnExportShip" class="btn ghost">本日出荷CSV</button>
-        </div>
-      </header>
-      <div class="table-wrap">
-        <table class="table s">
-          <thead>
-            <tr>
-              <th>注番/得意先</th><th>品名</th><th>品番</th><th>図番</th>
-              <th>状態</th><th>工程</th><th>更新日時</th><th>更新者</th><th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="tbOrders"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="card">
-      <header class="row-between">
-        <h3>ダッシュボード</h3>
-        <div class="row gap">
-          <button id="btnRefresh" class="btn ghost">更新</button>
-          <button class="btn ghost" onclick="window.print()">印刷</button>
-        </div>
-      </header>
-      <div class="grid-3">
-        <div class="tile"><div class="muted s">完成品在庫</div><div id="statFinished" class="stat-num">-</div></div>
-        <div class="tile"><div class="muted s">本日の出荷予定</div><div id="listToday" class="list s"></div></div>
-        <div class="tile"><div class="muted s">工程内滞留（現在位置）</div><div id="gridProc" class="grid grid-chips"></div></div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Placeholder halaman lain; isi sesuai backend-mu -->
-  <main id="pageSales"    class="container hide"><section class="card"><h3>受注（営業）</h3></section></main>
-  <main id="pagePlan"     class="container hide"><section class="card"><h3>生産計画</h3></section></main>
-  <main id="pageShip"     class="container hide"><section class="card"><h3>出荷予定</h3></section></main>
-  <main id="pageInventory"class="container hide"><section class="card"><h3>在庫</h3></section></main>
-  <main id="pageFinished" class="container hide"><section class="card"><h3>完成品一覧</h3></section></main>
-  <main id="pageInvoice"  class="container hide"><section class="card"><h3>請求書</h3></section></main>
-  <main id="pageCharts"   class="container hide"><section class="card"><h3>統計</h3></section></main>
-
-  <!-- Dialogs -->
-  <dialog id="dlgManual" class="paper">
-    <div class="body">
-      <h3>工程 手動更新</h3>
-      <div class="grid">
-        <select id="manProc"></select>
-        <select id="manStatus">
-          <option value="進行">進行</option>
-          <option value="組立中">組立中</option>
-          <option value="組立済">組立済</option>
-          <option value="検査中">検査中</option>
-          <option value="出荷準備">出荷準備</option>
-          <option value="出荷済">出荷済</option>
-          <option value="NG">NG</option>
-        </select>
-        <input id="manOk" type="number" placeholder="OK 数" min="0" value="0">
-        <input id="manNg" type="number" placeholder="NG 数" min="0" value="0">
-        <input id="manNote" placeholder="備考">
-      </div>
+<!-- AUTH -->
+<main id="authView" class="container">
+  <section class="card card-tight">
+    <h2><i class="fa-solid fa-right-to-bracket"></i> ログイン</h2>
+    <div class="grid">
+      <input id="inUser" placeholder="ユーザー名" class="lg-input" />
+      <input id="inPass" type="password" placeholder="パスワード" class="lg-input" />
     </div>
-    <footer class="row-end">
-      <button id="btnManCancel" class="btn">閉じる</button>
-      <button id="btnManSave" class="btn primary">保存</button>
-    </footer>
-  </dialog>
+    <details style="margin-top:.8rem">
+      <summary><strong><i class="fa-solid fa-user-gear"></i> 管理者: ユーザー追加</strong></summary>
+      <div class="grid" style="margin-top:.6rem">
+        <input id="nuUser" placeholder="ユーザー名" />
+        <input id="nuPass" type="password" placeholder="パスワード" />
+        <input id="nuName" placeholder="氏名" />
+        <select id="nuDept"><option>営業</option><option>生産技術</option><option>生産管理</option><option>製造</option><option>検査</option></select>
+        <select id="nuRole"><option>member</option><option>営業</option><option>生産管理</option><option>製造</option><option>検査</option><option>admin</option></select>
+      </div>
+      <button id="btnNewUser" class="btn ghost full admin-only">ユーザー追加</button>
+    </details>
+    <button id="btnLogin" class="btn primary full" style="margin-top:.8rem">ログイン</button>
+  </section>
+</main>
 
-  <a class="corner-brand" href="#">Design by Wahyu</a>
+<!-- PAGES (diringkas; fokus ke Dash + dialog update) -->
+<main id="pageDash" class="container hidden">
+  <section class="card">
+    <header class="row-between">
+      <h3><i class="fa-solid fa-clipboard-list"></i> オーダー一覧</h3>
+      <div class="row gap">
+        <input id="searchQ" placeholder="検索..." class="input" />
+      </div>
+    </header>
+    <div class="table-wrap">
+      <table class="table s">
+        <thead>
+          <tr>
+            <th>注番 / 得意先</th><th>品名</th><th>品番</th><th>図番</th><th>状態</th><th>工程</th><th>更新日時</th><th>更新者</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbOrders"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card">
+    <header class="row-between">
+      <h3><i class="fa-solid fa-gauge"></i> ダッシュボード</h3>
+      <div class="row gap">
+        <button class="btn ghost" id="btnRefresh"><i class="fa-solid fa-rotate"></i> 更新</button>
+        <button class="btn ghost" onclick="window.print()"><i class="fa-solid fa-print"></i> 印刷</button>
+      </div>
+    </header>
+    <div class="grid-3">
+      <div class="tile"><div class="muted s">完成品在庫</div><div id="statFinished" class="stat-num">-</div><div class="muted s"><span id="statReady">-</span> 準備 / <span id="statShipped">-</span> 出荷済</div></div>
+      <div class="tile"><div class="muted s">本日の出荷予定</div><div id="listToday" class="list s"></div></div>
+      <div class="tile"><div class="muted s">工程内滞留（現在位置）</div><div id="gridProc" class="grid grid-chips"></div></div>
+    </div>
+  </section>
+</main>
+
+<!-- Dialog 手動更新 -->
+<dialog id="dlgManual" class="paper">
+  <div class="body">
+    <h3>工程 手動更新（PO: <span id="manPO"></span>）</h3>
+    <div class="grid">
+      <select id="manProcess"></select>
+      <select id="manStatus">
+        <option>組立中</option><option>組立済</option><option>検査中</option><option>出荷準備</option><option>出荷済</option><option>生産開始</option><option>進行</option>
+      </select>
+      <input id="manOk" type="number" placeholder="OK 数" />
+      <input id="manNg" type="number" placeholder="NG 数" />
+      <input id="manNote" placeholder="備考" />
+    </div>
+  </div>
+  <footer class="row-end">
+    <button class="btn ghost" id="btnManClose">閉じる</button>
+    <button class="btn primary" id="btnManSave">保存</button>
+  </footer>
+</dialog>
+
+<a class="corner-brand" href="#" aria-label="Design credit">Design by Wahyu</a>
 </body>
 </html>
