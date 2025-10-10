@@ -2,7 +2,7 @@
    Tokyo Spring ERP Frontend
    =========================== */
 
-const API_BASE = "https://script.google.com/macros/s/AKfycbwYfhB5dD-vTNDCzlzuCfLGZvV9D8FsKc0zz9gUCZDRcLWWs_yp2U9bN6XMnorXFhiS/exec"; // << ganti URL Web App
+const API_BASE = "https://script.google.com/macros/s/AKfycbyZZe7ZSpYM3ogRgb7a9AjK8D9NWfeax0VuI0XcNmKLsjYvtGvrbstpEE1TMQ-V8ETs/exec"; // << ganti URL Web App
 const API_KEY  = ""; // optional jika kamu pakai kunci
 
 // ======= PROSES MASTER (urut tampil & label chip) =======
