@@ -1,11 +1,9 @@
-/* ===========================
-   Tokyo Spring ERP Frontend
-   CORS-safe + bigger login
-   =========================== */
+/* =================================================
+   Frontend JSONP (bebas CORS) + login UI lebih besar
+   ================================================= */
 
-/** GANTI dengan URL Web App terbaru (akhiran /exec) */
+/** GANTI dengan Web App URL (akhiran /exec) */
 const API_BASE = "https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec";
-const API_KEY  = ""; // optional
 
 const PROCESS_LIST = [
   "準備","シャッター溶接","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","出荷（組立済）"
@@ -15,53 +13,53 @@ const $  = (q,el=document)=> el.querySelector(q);
 const $$ = (q,el=document)=> [...el.querySelectorAll(q)];
 const qs = (o)=> Object.entries(o).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
 const fmt = (d)=> d? new Date(d).toLocaleString("ja-JP"):"";
-const nz  = (n)=> isFinite(+n)? +n : 0;
-const normalizeProc = (s)=> String(s||"").trim().replace("レーサ加工","レザー加工").replace("外作加工","外注加工/組立") || "未設定";
 
+const normalizeProc = (s)=> String(s||"").trim()
+  .replace("レーサ加工","レザー加工").replace("外作加工","外注加工/組立") || "未設定";
+
+/* ---------- JSONP helper (NO CORS) ---------- */
+function jsonp(action, params={}){
+  return new Promise((resolve,reject)=>{
+    const cb = "cb_" + Math.random().toString(36).slice(2);
+    params = { ...params, action, callback: cb };
+    const s = document.createElement("script");
+    const url = `${API_BASE}?${qs(params)}`;
+    s.src = url;
+    window[cb] = (resp)=>{
+      delete window[cb]; s.remove();
+      if(resp && resp.ok) resolve(resp.data);
+      else reject(new Error(resp && resp.error || "API error"));
+    };
+    s.onerror = ()=>{
+      delete window[cb]; s.remove();
+      reject(new Error("JSONP load error"));
+    };
+    document.body.appendChild(s);
+  });
+}
+
+/* ---------- UI helpers ---------- */
 const procToChip = (p)=>{
   p = normalizeProc(p);
-  const ic=(i)=>`<i class="${i}"></i>`;
-  if(/レザー加工|レーザー/.test(p)) return `<span class="chip p-laser">${ic("fa-solid fa-bolt")}${p}</span>`;
-  if(/曲げ/.test(p)) return `<span class="chip p-bend">${ic("fa-solid fa-wave-square")}${p}</span>`;
-  if(/外注加工|加工/.test(p)) return `<span class="chip p-press">${ic("fa-solid fa-compass-drafting")}${p}</span>`;
-  if(/組立/.test(p)) return `<span class="chip p-assembly">${ic("fa-solid fa-screwdriver-wrench")}${p}</span>`;
-  if(/検査/.test(p)) return `<span class="chip p-inspection">${ic("fa-regular fa-square-check")}${p}</span>`;
+  if(/レザー加工|レーザー/.test(p)) return `<span class="chip p-laser"><i class="fa-solid fa-bolt"></i>${p}</span>`;
+  if(/曲げ/.test(p)) return `<span class="chip p-bend"><i class="fa-solid fa-wave-square"></i>${p}</span>`;
+  if(/外注加工|加工/.test(p)) return `<span class="chip p-press"><i class="fa-solid fa-compass-drafting"></i>${p}</span>`;
+  if(/組立/.test(p)) return `<span class="chip p-assembly"><i class="fa-solid fa-screwdriver-wrench"></i>${p}</span>`;
+  if(/検査/.test(p)) return `<span class="chip p-inspection"><i class="fa-regular fa-square-check"></i>${p}</span>`;
   return `<span class="chip p-other"><i class="fa-regular fa-square"></i>${p}</span>`;
 };
 const statusToBadge = (s)=>{
   s = String(s||"");
-  const ic=(i)=>`<i class="${i}"></i>`;
-  if(/組立中/.test(s)) return `<span class="badge">${ic('fa-solid fa-screwdriver-wrench')}${s}</span>`;
-  if(/組立済/.test(s)) return `<span class="badge">${ic('fa-regular fa-circle-check')}${s}</span>`;
-  if(/検査中/.test(s)) return `<span class="badge st-inspected">${ic('fa-regular fa-clipboard')}${s}</span>`;
-  if(/検査済/.test(s)) return `<span class="badge st-inspected">${ic('fa-regular fa-circle-check')}${s}</span>`;
-  if(/出荷準備/.test(s)) return `<span class="badge st-ready">${ic('fa-solid fa-box-open')}${s}</span>`;
-  if(/出荷済/.test(s)) return `<span class="badge st-shipped">${ic('fa-solid fa-truck')}${s}</span>`;
-  return `<span class="badge">${ic('fa-regular fa-clock')}${s||"—"}</span>`;
+  if(/組立中/.test(s)) return `<span class="badge"><i class="fa-solid fa-screwdriver-wrench"></i>${s}</span>`;
+  if(/組立済/.test(s)) return `<span class="badge"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
+  if(/検査中/.test(s)) return `<span class="badge st-inspected"><i class="fa-regular fa-clipboard"></i>${s}</span>`;
+  if(/検査済/.test(s)) return `<span class="badge st-inspected"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
+  if(/出荷準備/.test(s)) return `<span class="badge st-ready"><i class="fa-solid fa-box-open"></i>${s}</span>`;
+  if(/出荷済/.test(s)) return `<span class="badge st-shipped"><i class="fa-solid fa-truck"></i>${s}</span>`;
+  return `<span class="badge"><i class="fa-regular fa-clock"></i>${s||"—"}</span>`;
 };
 
-// --- API helpers (GET/POST) ---
-async function apiGet(action, params={}){
-  const url = `${API_BASE}?${qs({action, ...params})}`;
-  const r = await fetch(url, { method:"GET" });     // simple request (tanpa header custom)
-  if(!r.ok) throw new Error(`HTTP ${r.status}`);
-  const j = await r.json();
-  if(!j.ok) throw new Error(j.error||"API error");
-  return j.data;
-}
-async function apiPost(action, payload={}){
-  const r = await fetch(API_BASE, {
-    method:"POST",
-    headers:{ "Content-Type":"text/plain" },       // simple, tanpa preflight
-    body: JSON.stringify({ action, apiKey:API_KEY, ...payload })
-  });
-  if(!r.ok) throw new Error(`HTTP ${r.status}`);
-  const j = await r.json();
-  if(!j.ok) throw new Error(j.error||"API error");
-  return j.data;
-}
-
-// --- Auth & Role ---
+/* ---------- Auth & Role ---------- */
 let CURRENT_USER = null;
 const ROLE_MAP = {
   'admin': { pages:['pageDash','pageSales','pagePlan','pageShip','pageInventory','pageFinished','pageInvoice','pageCharts'], nav:true },
@@ -96,7 +94,7 @@ function setUser(u){
   refreshAll();
 }
 
-// --- Nav ---
+/* ---------- Nav ---------- */
 function show(id){
   ["authView","pageDash","pageSales","pagePlan","pageShip","pageInventory","pageFinished","pageInvoice","pageCharts"].forEach(p=>$("#"+p)?.classList.add("hidden"));
   $("#"+id)?.classList.remove("hidden");
@@ -111,25 +109,28 @@ $("#btnToInvoice").onclick=()=> show("pageInvoice");
 $("#btnToCharts").onclick =()=> show("pageCharts");
 $("#btnLogout").onclick  =()=> setUser(null);
 
-// --- Login (dengan debug jelas) ---
+/* ---------- Login (pakai JSONP) ---------- */
 $("#btnLogin").onclick = async ()=>{
   const u = $("#inUser").value.trim();
   const p = $("#inPass").value.trim();
   if(!u || !p) return alert("ユーザー名 / パスワード を入力してください");
+
   try{
-    console.log("[Login] API_BASE =", API_BASE);
-    const me = await apiPost("login", { username:u, password:p });
-    console.log("[Login] OK", me);
+    // ping dulu supaya ketahuan kalau URL salah
+    const ping = await jsonp('ping');
+    console.log('Ping:', ping);
+
+    const me = await jsonp("login", { username:u, password:p });
     setUser(me);
   }catch(e){
     console.error("[Login] error:", e);
-    alert("ログイン失敗: " + (e?.message || e) + "\n(1) API_BASE? (2) Web Appの公開設定? (3) CORS/OPTIONS?");
+    alert("ログイン失敗: " + (e?.message || e));
   }
 };
 
-// --- Orders & Dash (ringkas, sama seperti versi sebelumnya) ---
+/* ---------- Orders & Dashboard ---------- */
 async function loadOrders(){
-  const list = await apiGet("listOrders");
+  const list = await jsonp("listOrders");
   const q = ($("#searchQ").value||"").trim().toLowerCase();
   const rows = list.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
   const tb = $("#tbOrders"); tb.innerHTML = "";
@@ -156,7 +157,7 @@ async function loadOrders(){
   $$(".btn-manual",tb).forEach(b=> b.onclick=(e)=> openManualDialog(e.currentTarget.dataset.po));
 }
 async function loadStats(){
-  const snap = await apiGet("locSnapshotAll");
+  const snap = await jsonp("locSnapshotAll");
   const grid = $("#gridProc"); grid.innerHTML = "";
   PROCESS_LIST.forEach(p=>{
     const name = normalizeProc(p);
@@ -165,12 +166,12 @@ async function loadStats(){
     span.innerHTML = procToChip(name)+`<span class="muted s" style="margin-left:.35rem">${c}</span>`;
     grid.appendChild(span);
   });
-  const s = await apiGet("stock");
+  const s = await jsonp("stock");
   $("#statFinished").textContent = s.finishedStock ?? 0;
   $("#statReady").textContent    = s.ready ?? 0;
   $("#statShipped").textContent  = s.shipped ?? 0;
 
-  const today = await apiGet("todayShip");
+  const today = await jsonp("todayShip");
   const ul = $("#listToday"); ul.innerHTML="";
   if(!today.length){ ul.innerHTML = `<div class="muted s">なし</div>`; }
   else today.forEach(x=>{
@@ -182,8 +183,51 @@ async function loadStats(){
 async function refreshAll(){ await Promise.all([loadOrders(), loadStats()]); }
 $("#btnRefresh").onclick = refreshAll;
 
-// --- Dialog scan / manual (sama seperti versi sebelumnya) ---
-/* ... (biarkan sesuai file kirimanku sebelumnya; tidak memengaruhi login) ... */
+/* ---------- Manual update (pakai JSONP) ---------- */
+function ensureManualDialog(){
+  if($("#dlgManual")) return;
+  const dlg = document.createElement("dialog");
+  dlg.id="dlgManual"; dlg.className="paper";
+  dlg.innerHTML = `
+  <div class="body">
+    <h3>工程 手動更新（PO: <span id="mPO"></span>）</h3>
+    <div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem">
+      <div><div class="muted s">工程</div><select id="mProc"></select></div>
+      <div><div class="muted s">状態</div>
+        <select id="mStatus">
+          <option value="進行">進行</option>
+          <option value="組立中">組立中</option>
+          <option value="組立済">組立済</option>
+          <option value="検査中">検査中</option>
+          <option value="検査済">検査済</option>
+          <option value="出荷準備">出荷準備</option>
+          <option value="出荷済">出荷済</option>
+        </select>
+      </div>
+      <div style="grid-column:1 / -1"><div class="muted s">メモ</div><input id="mNote" placeholder="備考"></div>
+    </div>
+  </div>
+  <footer class="row-end"><button class="btn ghost" id="mCancel">閉じる</button><button class="btn primary" id="mSave">保存</button></footer>`;
+  document.body.appendChild(dlg);
+  $("#mCancel").onclick=()=> $("#dlgManual").close();
+  $("#mSave").onclick=saveManual;
+}
+function openManualDialog(po){
+  ensureManualDialog();
+  $("#mPO").textContent = po;
+  const sel=$("#mProc"); sel.innerHTML="";
+  PROCESS_LIST.forEach(p=>{ const o=document.createElement("option"); o.value=normalizeProc(p); o.textContent=normalizeProc(p); sel.appendChild(o); });
+  $("#mStatus").value="進行"; $("#mNote").value=""; $("#dlgManual").showModal();
+}
+async function saveManual(){
+  const po=$("#mPO").textContent, proc=normalizeProc($("#mProc").value), status=$("#mStatus").value, note=$("#mNote").value;
+  await jsonp("setProcess", {
+    po_id: po,
+    updates: JSON.stringify({ current_process:proc, status, note }),
+    user: JSON.stringify(CURRENT_USER||{})
+  });
+  $("#dlgManual").close(); await refreshAll();
+}
 
-// Init
+/* ---------- Init ---------- */
 document.addEventListener("DOMContentLoaded", ()=> setUser(null));
