@@ -18,8 +18,61 @@ body{margin:0; font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,'Hiragino
 /* tombol nav terlihat */
 .nav .btn{border:1px solid rgba(255,255,255,.85); background:rgba(255,255,255,.22); color:#fff; font-weight:700; backdrop-filter:saturate(140%) blur(2px)}
 .nav .btn:hover,.nav .btn:focus{background:rgba(255,255,255,.34); border-color:#fff; box-shadow:0 0 0 .12rem rgba(255,255,255,.35)}
-.nav .btn.ghost{background:rgba(255,255,255,.18); border-color:rgba(255,255,255,.85); color:#fff}
-.nav .btn.ghost:hover,.nav .btn.ghost:focus{background:rgba(255,255,255,.32)}
+/* --- NAV: tombol selalu terlihat (tidak “ghost” terlalu pucat) --- */
+.nav .btn.ghost{
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.24);
+  color:#fff;
+}
+.nav .btn.ghost:hover{ background: rgba(255,255,255,.22); }
+
+/* --- Field login lebih besar --- */
+#authView input{ font-size:16px; padding:.7rem .9rem; }
+
+/* --- Badge status --- */
+.badge{ padding:.2rem .55rem; border-radius:999px; font-weight:700; line-height:1; }
+.badge.ok{ background:#e6fffa; color:#0f766e; }
+.badge.warn{ background:#fff7ed; color:#b45309; }
+.badge.err{ background:#fee2e2; color:#b91c1c; }
+.badge.proc{ background:#eef2ff; color:#4338ca; }
+.badge.ship{ background:#ecfeff; color:#0369a1; }
+
+/* --- Tabel fit: kolom ketat & wrap --- */
+.table-fit{ table-layout:fixed; width:100%; }
+.table-fit th, .table-fit td{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* Kolom: sesuaikan lebar agar tidak geser */
+.col-po      { width: 20rem; }
+.col-cust    { width: 11rem; }
+.col-name    { width: 12rem; }
+.col-part    { width: 10rem; }
+.col-drw     { width: 8rem;  }
+.col-status  { width: 9rem;  }
+.col-proc    { width: 9rem;  }
+.col-updAt   { width: 10rem; }
+.col-updBy   { width: 7rem;  }
+.col-act     { width: 10rem; }
+
+/* <= 1200px: kompres sedikit */
+@media (max-width:1200px){
+  .col-po{width:16rem}
+  .col-name{width:10rem}
+}
+
+/* <= 980px: stack jadi “kartu”, hilangkan header multi kolom */
+@media (max-width:980px){
+  .table-wrap{ overflow: visible; }
+  table.table-fit thead{ display:none; }
+  table.table-fit, table.table-fit tbody, table.table-fit tr, table.table-fit td{ display:block; width:100%; }
+  table.table-fit tr{ border:1px solid var(--border); border-radius:14px; padding:.65rem .75rem; margin-bottom:.6rem; background:#fff; }
+  table.table-fit td{ white-space:normal; overflow:visible; text-overflow:clip; }
+  table.table-fit td::before{
+    content: attr(data-label);
+    display:block; font-size:.72rem; color:#6b7280; margin-bottom:.15rem;
+  }
+  .col-act{ margin-top:.35rem; }
+}
+
 .nav .caret{ color:#fff; opacity:.95 }
 
 /* Weather pill */
