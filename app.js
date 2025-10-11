@@ -1,7 +1,7 @@
 /* =================================================
    JSONP Frontend (Optimized)
    - Dashboard status merge StatusLog
-   - CRUD: 受注 / 生産計画 / 出荷予定
+   - CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧
    - 操作: QR scanner + 手入力 (OK/NG/工程)
    - Import / Export / Print
    - Cuaca (Open-Meteo, cached)
@@ -35,12 +35,9 @@ function jsonp(action, params={}){
 const apiCache = new Map();
 async function cached(action, params={}, ttlMs=15000){
   const key = action + ":" + JSON.stringify(params||{});
-  const hit = apiCache.get(key);
-  const now = Date.now();
+  const hit = apiCache.get(key); const now = Date.now();
   if(hit && now-hit.t < ttlMs) return hit.v;
-  const v = await jsonp(action, params);
-  apiCache.set(key, {v, t: now});
-  return v;
+  const v = await jsonp(action, params); apiCache.set(key, {v,t:now}); return v;
 }
 
 /* ---------- Badges ---------- */
@@ -67,21 +64,21 @@ const statusToBadge = (s)=>{
 /* ---------- Auth & Role ---------- */
 let CURRENT_USER = null;
 const ROLE_MAP = {
-  'admin': { pages:['pageDash','pageSales','pagePlan','pageShip'], nav:true },
-  '営業': { pages:['pageSales','pageDash'], nav:true },
-  '生産管理': { pages:['pagePlan','pageShip','pageDash'], nav:true },
-  '生産管理部': { pages:['pagePlan','pageShip','pageDash'], nav:true },
-  '製造': { pages:['pageDash'], nav:true },
-  '検査': { pages:['pageDash'], nav:true }
+  'admin': { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished'], nav:true },
+  '営業': { pages:['pageSales','pageDash','pageFinished'], nav:true },
+  '生産管理': { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
+  '生産管理部': { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
+  '製造': { pages:['pageDash','pageFinished'], nav:true },
+  '検査': { pages:['pageDash','pageFinished'], nav:true }
 };
 function setUser(u){
   CURRENT_USER = u || null;
   $("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "";
 
-  const pages = ["authView","pageDash","pageSales","pagePlan","pageShip"];
+  const pages = ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished"];
   pages.forEach(p => $("#"+p)?.classList.add("hidden"));
 
-  ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToInvPage','btnToFinPage','btnToInvoice','ddSetting','weatherWrap']
+  ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToFinPage','btnToInvPage','btnToInvoice','ddSetting','weatherWrap']
     .forEach(id=> $("#"+id)?.classList.add("hidden"));
 
   if(!u){ $("#authView")?.classList.remove("hidden"); return; }
@@ -92,6 +89,7 @@ function setUser(u){
     if(allow.pages.includes('pageSales')) $("#btnToSales").classList.remove("hidden");
     if(allow.pages.includes('pagePlan')) $("#btnToPlan").classList.remove("hidden");
     if(allow.pages.includes('pageShip')) $("#btnToShip").classList.remove("hidden");
+    if(allow.pages.includes('pageFinished')) $("#btnToFinPage").classList.remove("hidden");
     $("#ddSetting").classList.remove("hidden");
 
     $("#weatherWrap").classList.remove("hidden");
@@ -105,16 +103,17 @@ function setUser(u){
 
 /* ---------- Nav ---------- */
 function show(id){
-  ["authView","pageDash","pageSales","pagePlan","pageShip"].forEach(p=>$("#"+p)?.classList.add("hidden"));
+  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished"].forEach(p=>$("#"+p)?.classList.add("hidden"));
   $("#"+id)?.classList.remove("hidden");
 }
 $("#btnToDash").onclick=()=>{ show("pageDash"); refreshAll(); };
 $("#btnToSales").onclick=()=>{ show("pageSales"); loadSales(); };
 $("#btnToPlan").onclick =()=>{ show("pagePlan");  loadPlans(); };
 $("#btnToShip").onclick =()=>{ show("pageShip");  loadShips(); };
+$("#btnToFinPage").onclick =()=>{ show("pageFinished"); loadFinished(); };
 $("#btnLogout").onclick  =()=> setUser(null);
 
-/* ---------- Login (enter to submit) ---------- */
+/* ---------- Login (enter ok) ---------- */
 $("#btnLogin").onclick = loginSubmit;
 $("#inUser").addEventListener("keydown", e=>{ if(e.key==='Enter') loginSubmit(); });
 $("#inPass").addEventListener("keydown", e=>{ if(e.key==='Enter') loginSubmit(); });
@@ -129,20 +128,14 @@ async function loginSubmit(){
   }catch(e){ alert("ログイン失敗: " + (e?.message || e)); }
 }
 
-/* ---------- Dashboard Orders + 操作 ---------- */
+/* ---------- Dashboard + 操作 (unchanged) ---------- */
 let ORDERS = [];
-async function loadOrders(){
-  ORDERS = await cached("listOrders");
-  renderOrders();
-  loadShipsMini();
-}
+async function loadOrders(){ ORDERS = await cached("listOrders"); renderOrders(); loadShipsMini(); }
 function renderOrders(){
   const q = ($("#searchQ").value||"").trim().toLowerCase();
   const rows = ORDERS.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
   const tb = $("#tbOrders"); tb.innerHTML = "";
-
-  const chunk = 120;
-  let i = 0;
+  const chunk = 120; let i = 0;
   function paint(){
     const end = Math.min(i+chunk, rows.length);
     const frag = document.createDocumentFragment();
@@ -170,7 +163,6 @@ function renderOrders(){
     if(i < rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
   }
   paint();
-
   $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
   $$(".btn-op",tb).forEach(b=> b.onclick=(e)=> openOpDialog(e.currentTarget.dataset.po));
 }
@@ -179,39 +171,29 @@ $("#searchQ").addEventListener("input", debouncedRender);
 async function refreshAll(){ await loadOrders(); }
 $("#btnExportOrders").onclick = ()=> exportTableCSV("#tbOrders","orders.csv");
 
-/* ---------- 操作: 手入力 dialog ---------- */
+/* ---------- 操作: 手入力 (unchanged) ---------- */
 const PROCESS_OPTIONS = ["準備","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","出荷（組立済）"];
 function openOpDialog(po, defaults = {}){
   $("#opPO").textContent = po;
   const sel = $("#opProcess");
   sel.innerHTML = PROCESS_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join('');
-
   $("#opProcess").value = defaults.process || PROCESS_OPTIONS[0];
   $("#opOK").value      = (defaults.ok_count ?? defaults.ok ?? "") === 0 ? 0 : (defaults.ok_count ?? defaults.ok ?? "");
   $("#opNG").value      = (defaults.ng_count ?? defaults.ng ?? "") === 0 ? 0 : (defaults.ng_count ?? defaults.ng ?? "");
   $("#opNote").value    = defaults.note || "";
-
   $("#dlgOp").showModal();
-
   $("#btnOpSave").onclick = async ()=>{
-    const okStr = $("#opOK").value;
-    const ngStr = $("#opNG").value;
-    const proc  = $("#opProcess").value;
+    const okStr = $("#opOK").value, ngStr = $("#opNG").value, proc = $("#opProcess").value;
     if(!proc) return alert("工程を選択してください");
     if(okStr === "") return alert("OK 数を入力してください（0 以上）");
     if(ngStr === "") return alert("NG 数を入力してください（0 以上）");
     const ok = Number(okStr), ng = Number(ngStr);
     if(Number.isNaN(ok) || ok < 0) return alert("OK 数は 0 以上の数値で入力してください");
     if(Number.isNaN(ng) || ng < 0) return alert("NG 数は 0 以上の数値で入力してください");
-
     try{
       await jsonp("saveOp", { data: JSON.stringify({ po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value }), user: JSON.stringify(CURRENT_USER||{}) });
       $("#dlgOp").close();
-      if($("#dlgScan").open){
-        if(scanRAF) cancelAnimationFrame(scanRAF);
-        if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
-        $("#dlgScan").close();
-      }
+      if($("#dlgScan").open){ if(scanRAF) cancelAnimationFrame(scanRAF); if(scanStream) scanStream.getTracks().forEach(t=> t.stop()); $("#dlgScan").close(); }
       await refreshAll();
     }catch(e){ alert("保存失敗: " + e.message); }
   };
@@ -220,10 +202,10 @@ $("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
 
 /* ---------- Masters ---------- */
 let MASTERS = { customers:[], drawings:[], item_names:[], part_nos:[], destinations:[], carriers:[], po_ids:[] };
-async function loadMasters(){
-  try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){ /* silent */ }
-}
+async function loadMasters(){ try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){ } }
 
+/* ---------- 受注 (ringkas + edit/hapus) ---------- */
+// ... (bagian 受注 Anda sebelumnya tetap sama persis)
 /* ---------- 受注 ---------- */
 const SALES_FIELDS = [
   {name:'po_id', label:'注番', req:true},
