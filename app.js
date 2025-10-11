@@ -1,63 +1,25 @@
 /* =================================================
-   JSONP Frontend (Optimized)
+   JSONP Frontend (Hardened)
    - Dashboard status merge StatusLog
-   - CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧
-   - 操作: QR scanner + 手入力 (OK/NG/工程) + QR 生成
+   - CRUD: 受注 / 生産計画 / 出荷予定
+   - 操作: QR scanner + 手入力 (OK/NG/工程)
    - Import / Export / Print
    - Cuaca (Open-Meteo, cached)
-   - Users Management (System Setting)
    ================================================= */
 
 /** Web App URL (akhiran /exec) */
 const API_BASE = "https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec";
 
+/* ---------- Tiny helpers ---------- */
 const $  = (q,el=document)=> el.querySelector(q);
 const $$ = (q,el=document)=> [...el.querySelectorAll(q)];
 const qs = (o)=> Object.entries(o).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
 const fmt = (d)=> d? new Date(d).toLocaleString("ja-JP"):"";
+const normalizeProc = (s)=> String(s||"").trim()
+  .replace("レーサ加工","レザー加工").replace("外作加工","外注加工/組立") || "未設定";
 
-/* ---------- Normalisasi Proses & Badge ---------- */
-const normalizeProc = (s)=> {
-  s = String(s||"").trim()
-    .replace("レーサ加工","レザー加工")
-    .replace("外作加工","外注加工/組立")
-    .replace("出荷(組立済）","出荷（組立済）")
-    .replace("出荷(組立済)","出荷（組立済）");
-  const map = {
-    "準備":"準備",
-    "レザー":"レザー加工","レーザー":"レザー加工","レザー加工":"レザー加工",
-    "曲げ":"曲げ加工","曲げ加工":"曲げ加工",
-    "外注":"外注加工/組立","外注加工":"外注加工/組立","外注加工/組立":"外注加工/組立",
-    "組立":"組立中","組立中":"組立中","組立済":"組立済",
-    "検査":"検査中","検査工程":"検査中","検査中":"検査中","検査済":"検査済",
-    "出荷（組立済）":"出荷（組立済）","出荷準備":"出荷準備","出荷済":"出荷済"
-  };
-  for(const k in map){ if(s===k || s.includes(k)) return map[k]; }
-  return s || "未設定";
-};
-
-const procToChip = (p)=>{
-  p = normalizeProc(p);
-  if(/レザー加工|レーザー/.test(p)) return `<span class="chip p-laser"><i class="fa-solid fa-bolt"></i>${p}</span>`;
-  if(/曲げ/.test(p)) return `<span class="chip p-bend"><i class="fa-solid fa-wave-square"></i>${p}</span>`;
-  if(/外注加工|加工/.test(p)) return `<span class="chip p-press"><i class="fa-solid fa-compass-drafting"></i>${p}</span>`;
-  if(/組立中|組立済/.test(p)) return `<span class="chip p-assembly"><i class="fa-solid fa-screwdriver-wrench"></i>${p}</span>`;
-  if(/検査中|検査済/.test(p)) return `<span class="chip p-inspection"><i class="fa-regular fa-square-check"></i>${p}</span>`;
-  if(/出荷（組立済）|出荷準備|出荷済/.test(p)) return `<span class="chip p-other"><i class="fa-solid fa-truck"></i>${p}</span>`;
-  return `<span class="chip p-other"><i class="fa-regular fa-square"></i>${p||'—'}</span>`;
-};
-
-const statusToBadge = (s)=>{
-  s = String(s||"");
-  if(/組立中/.test(s)) return `<span class="badge"><i class="fa-solid fa-screwdriver-wrench"></i>${s}</span>`;
-  if(/組立済/.test(s)) return `<span class="badge"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
-  if(/検査中/.test(s)) return `<span class="badge st-inspected"><i class="fa-regular fa-clipboard"></i>${s}</span>`;
-  if(/検査済/.test(s)) return `<span class="badge st-inspected"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
-  if(/出荷準備/.test(s)) return `<span class="badge st-ready"><i class="fa-solid fa-box-open"></i>${s}</span>`;
-  if(/出荷済/.test(s)) return `<span class="badge st-shipped"><i class="fa-solid fa-truck"></i>${s}</span>`;
-  if(/進行/.test(s)) return `<span class="badge"><i class="fa-regular fa-clock"></i>${s}</span>`;
-  return `<span class="badge"><i class="fa-regular fa-clock"></i>${s||"—"}</span>`;
-};
+// helper aman untuk binding
+const on = (sel, ev, fn) => { const el = $(sel); if (el) el.addEventListener(ev, fn); };
 
 /* ---------- JSONP helper (NO CORS) ---------- */
 function jsonp(action, params={}){
@@ -67,7 +29,7 @@ function jsonp(action, params={}){
     const s = document.createElement("script");
     s.src = `${API_BASE}?${qs(params)}`;
     let timeout = setTimeout(()=>{ cleanup(); reject(new Error("API timeout")); }, 20000);
-    function cleanup(){ delete window[cb]; s.remove(); clearTimeout(timeout); }
+    function cleanup(){ try{ delete window[cb]; }catch(_){} s.remove(); clearTimeout(timeout); }
     window[cb] = (resp)=>{
       cleanup();
       if(resp && resp.ok) resolve(resp.data);
@@ -90,22 +52,45 @@ async function cached(action, params={}, ttlMs=15000){
   return v;
 }
 
+/* ---------- Badges ---------- */
+const procToChip = (p)=>{
+  p = normalizeProc(p);
+  if(/レザー加工|レーザー/.test(p)) return `<span class="chip p-laser"><i class="fa-solid fa-bolt"></i>${p}</span>`;
+  if(/曲げ/.test(p)) return `<span class="chip p-bend"><i class="fa-solid fa-wave-square"></i>${p}</span>`;
+  if(/外注加工|加工/.test(p)) return `<span class="chip p-press"><i class="fa-solid fa-compass-drafting"></i>${p}</span>`;
+  if(/組立/.test(p)) return `<span class="chip p-assembly"><i class="fa-solid fa-screwdriver-wrench"></i>${p}</span>`;
+  if(/検査/.test(p)) return `<span class="chip p-inspection"><i class="fa-regular fa-square-check"></i>${p}</span>`;
+  return `<span class="chip p-other"><i class="fa-regular fa-square"></i>${p||'—'}</span>`;
+};
+const statusToBadge = (s)=>{
+  s = String(s||"");
+  if(/組立中/.test(s)) return `<span class="badge"><i class="fa-solid fa-screwdriver-wrench"></i>${s}</span>`;
+  if(/組立済/.test(s)) return `<span class="badge"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
+  if(/検査中/.test(s)) return `<span class="badge st-inspected"><i class="fa-regular fa-clipboard"></i>${s}</span>`;
+  if(/検査済/.test(s)) return `<span class="badge st-inspected"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
+  if(/出荷準備/.test(s)) return `<span class="badge st-ready"><i class="fa-solid fa-box-open"></i>${s}</span>`;
+  if(/出荷済/.test(s)) return `<span class="badge st-shipped"><i class="fa-solid fa-truck"></i>${s}</span>`;
+  return `<span class="badge"><i class="fa-regular fa-clock"></i>${s||"—"}</span>`;
+};
+
 /* ---------- Auth & Role ---------- */
 let CURRENT_USER = null;
 const ROLE_MAP = {
   'admin': { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished','pageUsers'], nav:true },
   '営業': { pages:['pageSales','pageDash'], nav:true },
-  '生産管理': { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
-  '生産管理部': { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
+  '生産管理': { pages:['pagePlan','pageShip','pageDash'], nav:true },
+  '生産管理部': { pages:['pagePlan','pageShip','pageDash'], nav:true },
   '製造': { pages:['pageDash'], nav:true },
-  '検査': { pages:['pageDash','pageFinished'], nav:true }
+  '検査': { pages:['pageDash'], nav:true }
 };
+
 function setUser(u){
   CURRENT_USER = u || null;
-  $("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "";
+  $("#userInfo") && ($("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "");
 
-  const pages = ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageUsers"];
-  pages.forEach(p => $("#"+p)?.classList.add("hidden"));
+  // sembunyikan halaman
+  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageUsers"]
+    .forEach(p => $("#"+p)?.classList.add("hidden"));
 
   // Sembunyikan semua menu saat belum login
   ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToFinished','btnToUsers','btnToInvPage','btnToFinPage','btnToInvoice','ddSetting','weatherWrap']
@@ -115,17 +100,16 @@ function setUser(u){
 
   const allow = ROLE_MAP[u.role] || ROLE_MAP[u.department] || ROLE_MAP['admin'];
   if(allow?.nav){
-    if(allow.pages.includes('pageDash')) $("#btnToDash").classList.remove("hidden");
-    if(allow.pages.includes('pageSales')) $("#btnToSales").classList.remove("hidden");
-    if(allow.pages.includes('pagePlan')) $("#btnToPlan").classList.remove("hidden");
-    if(allow.pages.includes('pageShip')) $("#btnToShip").classList.remove("hidden");
-    if(allow.pages.includes('pageFinished')) $("#btnToFinished").classList.remove("hidden");
-    if(allow.pages.includes('pageUsers')) $("#btnToUsers").classList.remove("hidden");
+    if(allow.pages.includes('pageDash')) $("#btnToDash")?.classList.remove("hidden");
+    if(allow.pages.includes('pageSales')) $("#btnToSales")?.classList.remove("hidden");
+    if(allow.pages.includes('pagePlan')) $("#btnToPlan")?.classList.remove("hidden");
+    if(allow.pages.includes('pageShip')) $("#btnToShip")?.classList.remove("hidden");
+    if(allow.pages.includes('pageFinished')) $("#btnToFinished")?.classList.remove("hidden");
+    if(allow.pages.includes('pageUsers')) $("#btnToUsers")?.classList.remove("hidden");
+    $("#ddSetting")?.classList.remove("hidden");
 
-    $("#ddSetting").classList.remove("hidden");
-
-    // Cuaca + masters
-    $("#weatherWrap").classList.remove("hidden");
+    // Cuaca + masters (aman bila elemen tidak ada)
+    $("#weatherWrap")?.classList.remove("hidden");
     ensureWeather();
     loadMasters();
   }
@@ -134,57 +118,24 @@ function setUser(u){
   refreshAll();
 }
 
-/* ---------- Nav ---------- */
 /* ---------- Nav (SAFE BINDINGS) ---------- */
-// Tampilkan 1 halaman dan sembunyikan yang lain
 function show(id){
   ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageUsers"]
     .forEach(p => $("#"+p)?.classList.add("hidden"));
   $("#"+id)?.classList.remove("hidden");
 }
-
-// Helper aman untuk binding event ke elemen yang mungkin belum ada
-const on = (sel, ev, fn) => {
-  const el = $(sel);
-  if (el) el.addEventListener(ev, fn);
-};
-
-// Tombol navigasi
 on("#btnToDash",     "click", () => { show("pageDash");     refreshAll(); });
 on("#btnToSales",    "click", () => { show("pageSales");    loadSales();  });
 on("#btnToPlan",     "click", () => { show("pagePlan");     loadPlans();  });
 on("#btnToShip",     "click", () => { show("pageShip");     loadShips();  });
-
-// Opsional (jika halaman ini memang ada di HTML + fungsi loader tersedia)
-on("#btnToFinished", "click", () => {
-  show("pageFinished");
-  if (typeof loadFinished === "function") loadFinished();
-});
-on("#btnToUsers",    "click", () => {
-  show("pageUsers");
-  if (typeof loadUsers === "function") loadUsers();
-});
-
-// Logout
+on("#btnToFinished", "click", () => { show("pageFinished"); if(typeof loadFinished==="function") loadFinished(); });
+on("#btnToUsers",    "click", () => { show("pageUsers");    if(typeof loadUsers==="function") loadUsers(); });
 on("#btnLogout",     "click", () => setUser(null));
 
-$("#btnToDash").onclick=()=>{ show("pageDash"); refreshAll(); };
-$("#btnToSales").onclick=()=>{ show("pageSales"); loadSales(); };
-$("#btnToPlan").onclick =()=>{ show("pagePlan");  loadPlans(); };
-$("#btnToShip").onclick =()=>{ show("pageShip");  loadShips(); };
-$("#btnToFinished").onclick =()=>{ show("pageFinished"); loadFinished(); };
-$("#btnToUsers").onclick =()=>{ show("pageUsers"); loadUsers(); };
-$("#btnLogout").onclick  =()=> setUser(null);
-
 /* ---------- Login ---------- */
-$("#btnLogin").onclick = doLogin;
-["#inUser","#inPass"].forEach(sel=>{
-  const el = $(sel); if(!el) return;
-  el.addEventListener("keydown", (e)=>{ if(e.key==="Enter") doLogin(); });
-});
 async function doLogin(){
-  const u = $("#inUser").value.trim();
-  const p = $("#inPass").value.trim();
+  const u = $("#inUser")?.value.trim();
+  const p = $("#inPass")?.value.trim();
   if(!u || !p) return alert("ユーザー名 / パスワード を入力してください");
   try{
     await jsonp('ping');
@@ -192,6 +143,10 @@ async function doLogin(){
     setUser(me);
   }catch(e){ alert("ログイン失敗: " + (e?.message || e)); }
 }
+on("#btnLogin","click", doLogin);
+// login via Enter (di input username & password)
+on("#inUser","keydown", (ev)=>{ if(ev.key==="Enter") doLogin(); });
+on("#inPass","keydown", (ev)=>{ if(ev.key==="Enter") doLogin(); });
 
 /* ---------- Dashboard Orders + 操作 ---------- */
 let ORDERS = [];
@@ -202,9 +157,9 @@ async function loadOrders(){
 }
 
 function renderOrders(){
-  const q = ($("#searchQ").value||"").trim().toLowerCase();
+  const q = ($("#searchQ")?.value||"").trim().toLowerCase();
   const rows = ORDERS.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-  const tb = $("#tbOrders"); tb.innerHTML = "";
+  const tb = $("#tbOrders"); if(!tb) return; tb.innerHTML = "";
 
   const chunk = 120;
   let i = 0;
@@ -225,8 +180,7 @@ function renderOrders(){
         <td class="center">${r.updated_by||"—"}</td>
         <td class="center">
           <div class="row">
-            <button class="btn ghost btn-qr"   data-po="${r.po_id}"><i class="fa-solid fa-qrcode"></i> QR</button>
-            <button class="btn ghost btn-scan" data-po="${r.po_id}"><i class="fa-solid fa-camera"></i> スキャン</button>
+            <button class="btn ghost btn-scan" data-po="${r.po_id}"><i class="fa-solid fa-qrcode"></i> スキャン</button>
             <button class="btn ghost btn-op"   data-po="${r.po_id}"><i class="fa-solid fa-keyboard"></i> 手入力</button>
           </div>
         </td>`;
@@ -234,43 +188,42 @@ function renderOrders(){
     }
     tb.appendChild(frag);
     if(i < rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
+
+    $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
+    $$(".btn-op",tb).forEach(b=> b.onclick=(e)=> openOpDialog(e.currentTarget.dataset.po));
   }
   paint();
-
-  $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
-  $$(".btn-op",tb).forEach(b=> b.onclick=(e)=> openOpDialog(e.currentTarget.dataset.po));
-  $$(".btn-qr",tb).forEach(b=> b.onclick=(e)=> openQRDialog(e.currentTarget.dataset.po));
 }
 const debouncedRender = debounce(renderOrders, 250);
-$("#searchQ").addEventListener("input", debouncedRender);
-
-async function refreshAll(){ await loadOrders(); }
-$("#btnExportOrders").onclick = ()=> exportTableCSV("#tbOrders","orders.csv");
+$("#searchQ")?.addEventListener("input", debouncedRender);
 
 /* ---------- 操作: 手入力 dialog ---------- */
 const PROCESS_OPTIONS = [
-  "準備","レザー加工","曲げ加工","外注加工/組立",
+  "準備",
+  "レザー加工",
+  "曲げ加工",
+  "外注加工/組立",
   "組立中","組立済",
   "検査中","検査済",
   "出荷（組立済）","出荷準備","出荷済"
 ];
 
 function openOpDialog(po, defaults = {}){
-  $("#opPO").textContent = po;
-  const sel = $("#opProcess");
+  $("#opPO") && ($("#opPO").textContent = po);
+  const sel = $("#opProcess"); if(!sel) return;
   sel.innerHTML = PROCESS_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join('');
 
   $("#opProcess").value = defaults.process || PROCESS_OPTIONS[0];
-  $("#opOK").value      = (defaults.ok_count ?? defaults.ok ?? "") === 0 ? 0 : (defaults.ok_count ?? defaults.ok ?? "");
-  $("#opNG").value      = (defaults.ng_count ?? defaults.ng ?? "") === 0 ? 0 : (defaults.ng_count ?? defaults.ng ?? "");
-  $("#opNote").value    = defaults.note || "";
+  $("#opOK")      && ($("#opOK").value   = (defaults.ok_count ?? defaults.ok ?? "") === 0 ? 0 : (defaults.ok_count ?? defaults.ok ?? ""));
+  $("#opNG")      && ($("#opNG").value   = (defaults.ng_count ?? defaults.ng ?? "") === 0 ? 0 : (defaults.ng_count ?? defaults.ng ?? ""));
+  $("#opNote")    && ($("#opNote").value = defaults.note || "");
 
-  $("#dlgOp").showModal();
+  $("#dlgOp")?.showModal();
 
-  $("#btnOpSave").onclick = async ()=>{
-    const okStr = $("#opOK").value;
-    const ngStr = $("#opNG").value;
-    const proc  = $("#opProcess").value;
+  on("#btnOpSave","click", async ()=>{
+    const okStr = $("#opOK")?.value ?? "";
+    const ngStr = $("#opNG")?.value ?? "";
+    const proc  = $("#opProcess")?.value ?? "";
 
     if(!proc) return alert("工程を選択してください");
     if(okStr === "") return alert("OK 数を入力してください（0 以上）");
@@ -282,55 +235,27 @@ function openOpDialog(po, defaults = {}){
 
     try{
       await jsonp("saveOp", {
-        data: JSON.stringify({
-          po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value
-        }),
+        data: JSON.stringify({ po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote")?.value || "" }),
         user: JSON.stringify(CURRENT_USER||{})
       });
-      $("#dlgOp").close();
+      $("#dlgOp")?.close();
 
-      if($("#dlgScan").open){
+      if($("#dlgScan")?.open){
         if(scanRAF) cancelAnimationFrame(scanRAF);
         if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
         $("#dlgScan").close();
       }
-
       await refreshAll();
     }catch(e){ alert("保存失敗: " + e.message); }
-  };
-}
-$("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
-
-/* ---------- QR 生成 dialog ---------- */
-function openQRDialog(po){
-  $("#qrPO").textContent = po;
-  const sel = $("#qrProcess");
-  sel.innerHTML = PROCESS_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join('');
-  $("#qrOK").value = 0; $("#qrNG").value = 0; $("#qrNote").value = "";
-  $("#qrImg").src = ""; $("#qrLink").href = "#";
-  $("#dlgQR").showModal();
-
-  const refresh = ()=>{
-    const proc = $("#qrProcess").value;
-    const ok = Number($("#qrOK").value||0);
-    const ng = Number($("#qrNG").value||0);
-    const note = $("#qrNote").value||"";
-    const payload = `${po}|${proc}|${ok}|${ng}|${note}`;
-    const url = `https://chart.googleapis.com/chart?chs=240x240&cht=qr&chl=${encodeURIComponent(payload)}`;
-    $("#qrImg").src = url;
-    $("#qrLink").href = url;
-  };
-  ["#qrProcess","#qrOK","#qrNG","#qrNote"].forEach(id=> $(id).oninput = refresh);
-  refresh();
-
-  $("#btnQRClose").onclick = ()=> $("#dlgQR").close();
+  });
+  on("#btnOpCancel","click", ()=> $("#dlgOp")?.close());
 }
 
 /* ---------- 受注 ---------- */
 let MASTERS = { customers:[], drawings:[], item_names:[], part_nos:[], po_ids:[], destinations:[], carriers:[] };
 
 async function loadMasters(){
-  try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){}
+  try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){ /* silent */ }
 }
 
 const SALES_FIELDS = [
@@ -342,164 +267,56 @@ const SALES_FIELDS = [
   {name:'受注日', label:'受注日', type:'date'},
   {name:'製造番号', label:'製造番号'},
   {name:'qty',   label:'数量'},
-  {name:'納期',  label:'納期', type:'date'},
-  {name:'備考',  label:'備考'}
-];
-// Kolom view 受注
-const SALES_VIEW = [
-  {label:'受注日',   keys:['受注日']},
-  {label:'得意先',   keys:['得意先','customer']},
-  {label:'品名',     keys:['品名','item_name']},
-  {label:'品番',     keys:['品番','part_no','item_code']},
-  {label:'図番',     keys:['図番','drawing_no']},
-  {label:'製番号',   keys:['製番号','製造番号']},
-  {label:'数量',     keys:['数量','qty']},
-  {label:'希望納期', keys:['希望納期','納期','due']},
-  {label:'備考',     keys:['備考','note']},
+  {name:'納期',  label:'納期', type:'date'}
 ];
 
 async function loadSales(){
   const dat = await cached("listSales");
-  renderSalesSlim(dat);
+  renderTable(dat, "#thSales", "#tbSales", "#salesSearch");
 }
-function renderSalesSlim(dat){
-  const th = $("#thSales"), tb = $("#tbSales"), search = $("#salesSearch");
-  const header = dat.header || [];
-  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
-  const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
-
-  const pick = (row, keys)=> { for(const k of keys){ const i = idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
-
-  th.innerHTML = `<tr>${SALES_VIEW.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr>`;
-
-  const render = ()=>{
-    const q = (search.value||'').toLowerCase();
-    tb.innerHTML = '';
-    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-
-    let i=0; const chunk=150;
-    function paint(){
-      const end=Math.min(i+chunk, rows.length);
-      const frag=document.createDocumentFragment();
-      for(;i<end;i++){
-        const r = rows[i];
-        const po = String(r[idx[keyPO]]||'');
-        const tds = SALES_VIEW.map(col=>{
-          let v = pick(r, col.keys);
-          if(v && (col.label==='受注日' || col.label==='希望納期')){
-            const d = (v instanceof Date) ? v : new Date(v);
-            if(!isNaN(d)) v = d.toLocaleDateString('ja-JP');
-          }
-          return `<td>${v ?? ''}</td>`;
-        }).join('');
-        const tr=document.createElement('tr');
-        tr.innerHTML = `${tds}
-          <td class="center">
-            <div class="row">
-              <button class="btn ghost btn-edit" data-po="${po}"><i class="fa-regular fa-pen-to-square"></i> 編集</button>
-              <button class="btn ghost btn-del"  data-po="${po}"><i class="fa-regular fa-trash-can"></i> 削除</button>
-            </div>
-          </td>`;
-        frag.appendChild(tr);
-      }
-      tb.appendChild(frag);
-      if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
-      if(i>=rows.length){
-        $$(".btn-edit", tb).forEach(b=> b.onclick = (e)=> editSales(e.currentTarget.dataset.po, dat));
-        $$(".btn-del",  tb).forEach(b=> b.onclick = (e)=> deleteSales(e.currentTarget.dataset.po));
-      }
-    }
-    paint();
-  };
-  search.oninput = debounce(render, 250);
-  render();
-}
-function rowToObject(dat, po_id){
-  const header = dat.header || [];
-  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
-  const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
-  const row = (dat.rows||[]).find(r => String(r[idx[keyPO]])===String(po_id));
-  if(!row) return null;
-  const obj = {};
-  header.forEach((h,i)=> obj[String(h).trim()] = row[i]);
-  obj.po_id = obj.po_id || obj['注番'] || po_id;
-  return obj;
-}
-function editSales(po_id, dat){
-  const obj = rowToObject(dat, po_id);
-  if(!obj) return alert('データが見つかりません');
-  const initial = {
-    po_id: obj.po_id,
-    '得意先': obj['得意先'] || obj.customer || '',
-    '図番':   obj['図番'] || obj.drawing_no || '',
-    '品名':   obj['品名'] || obj.item_name || '',
-    '品番':   obj['品番'] || obj.part_no || obj.item_code || '',
-    '受注日': obj['受注日'] || '',
-    '製造番号': obj['製造番号'] || obj['製番号'] || '',
-    'qty':    obj['数量'] || obj.qty || '',
-    '納期':   obj['希望納期'] || obj['納期'] || obj.due || '',
-    '備考':   obj['備考'] || obj.note || ''
-  };
-  openForm("受注 編集", SALES_FIELDS, "saveSales", async ()=>{ await loadSales(); }, initial);
-}
-async function deleteSales(po_id){
-  if(!confirm(`注番 ${po_id} を削除しますか？`)) return;
-  try{ await jsonp('deleteSales', { po_id }); await loadSales(); }
-  catch(e){ alert('削除失敗: ' + (e?.message || e)); }
-}
-$("#btnSalesCreate").onclick = ()=> openForm("受注作成", SALES_FIELDS, "saveSales");
-$("#btnSalesExport").onclick = ()=> exportTableCSV("#tbSales","sales.csv");
-$("#btnSalesImport").onclick = ()=> importCSVtoSheet("bulkImportSales");
-$("#btnSalesPrint").onclick  = ()=> window.print();
-const btnTpl = $("#btnSalesTpl"); if(btnTpl) btnTpl.onclick = ()=> downloadTemplate(['po_id','得意先','図番','品名','品番','受注日','製造番号','qty','納期','備考'],'sales_template.csv');
+on("#btnSalesCreate","click", ()=> openForm("受注作成", SALES_FIELDS, "saveSales"));
+on("#btnSalesExport","click", ()=> exportTableCSV("#tbSales","sales.csv"));
+on("#btnSalesImport","click", ()=> importCSVtoSheet("bulkImportSales"));
+on("#btnSalesPrint","click",  ()=> window.print());
 
 /* ---------- 生産計画 ---------- */
 const PLAN_FIELDS = [
-  {name:'po_id', label:'注番', req:true, type:'select', options:()=>MASTERS.po_ids?.length?MASTERS.po_ids:[]},
-  {name:'得意先', label:'得意先', type:'select', options:()=>MASTERS.customers},
-  {name:'図番', label:'図番', type:'select', options:()=>MASTERS.drawings},
-  {name:'品名', label:'品名', type:'select', options:()=>MASTERS.item_names},
-  {name:'品番', label:'品番', type:'select', options:()=>MASTERS.part_nos},
-  {name:'製造番号', label:'製造番号'},
-  {name:'qty', label:'数量'},
+  {name:'po_id', label:'注番', req:true},
+  {name:'得意先', label:'得意先'},
+  {name:'図番', label:'図番'},
+  {name:'品名', label:'品名'},
+  {name:'品番', label:'品番'},
   {name:'current_process', label:'工程(開始)', type:'select', options: PROCESS_OPTIONS},
   {name:'status', label:'状態', type:'select', options:["進行","組立中","組立済","検査中","検査済","出荷準備","出荷済"]},
   {name:'start_date', label:'開始日', type:'date'},
   {name:'due_date', label:'完了予定', type:'date'},
   {name:'note', label:'備考'}
 ];
-async function loadPlans(){
-  const dat = await cached("listPlans");
-  renderTable(dat, "#thPlan", "#tbPlan", "#planSearch");
-}
-$("#btnPlanCreate").onclick = ()=> openForm("生産計画 作成", PLAN_FIELDS, "savePlan", ()=> { loadPlans(); loadOrders(); });
-$("#btnPlanExport").onclick = ()=> exportTableCSV("#tbPlan","plans.csv");
-$("#btnPlanImport").onclick = ()=> importCSVtoSheet("bulkImportPlans", ()=> { loadPlans(); loadOrders(); });
-$("#btnPlanPrint").onclick  = ()=> window.print();
+async function loadPlans(){ const dat = await cached("listPlans"); renderTable(dat, "#thPlan", "#tbPlan", "#planSearch"); }
+on("#btnPlanCreate","click", ()=> openForm("生産計画 作成", PLAN_FIELDS, "savePlan", ()=> { loadPlans(); loadOrders(); }));
+on("#btnPlanExport","click", ()=> exportTableCSV("#tbPlan","plans.csv"));
+on("#btnPlanImport","click", ()=> importCSVtoSheet("bulkImportPlans", ()=> { loadPlans(); loadOrders(); }));
+on("#btnPlanPrint","click",  ()=> window.print());
 
 /* ---------- 出荷予定 ---------- */
 const SHIP_FIELDS = [
-  {name:'po_id', label:'注番', req:true, type:'select', options:()=>MASTERS.po_ids?.length?MASTERS.po_ids:[]},
-  {name:'得意先', label:'得意先', type:'select', options:()=>MASTERS.customers},
-  {name:'図番', label:'図番', type:'select', options:()=>MASTERS.drawings},
-  {name:'品名', label:'品名', type:'select', options:()=>MASTERS.item_names},
-  {name:'品番', label:'品番', type:'select', options:()=>MASTERS.part_nos},
-  {name:'製造番号', label:'製造番号'},
+  {name:'po_id', label:'注番', req:true},
+  {name:'得意先', label:'得意先'},
+  {name:'図番', label:'図番'},
+  {name:'品名', label:'品名'},
+  {name:'品番', label:'品番'},
+  {name:'destination', label:'送り先', type:'select', options: ()=> (MASTERS.destinations||[]) },
   {name:'qty', label:'数量'},
-  {name:'destination', label:'送り先', type:'select', options:()=>MASTERS.destinations},
-  {name:'carrier', label:'運送会社', type:'select', options:()=>MASTERS.carriers},
   {name:'scheduled_date', label:'出荷日', type:'date'},
-  {name:'delivery_date', label:'納入日', type:'date'},
+  {name:'delivery_date',  label:'納入日', type:'date'},
+  {name:'carrier',        label:'運送会社', type:'select', options: ()=> (MASTERS.carriers||[]) },
   {name:'note', label:'備考'}
 ];
-async function loadShips(){
-  const dat = await cached("listShip");
-  renderTable(dat, "#thShip", "#tbShip", "#shipSearch");
-}
-$("#btnShipCreate").onclick = ()=> openForm("出荷予定 作成", SHIP_FIELDS, "saveShip", ()=> { loadShips(); loadShipsMini(); });
-$("#btnShipExport").onclick = ()=> exportTableCSV("#tbShip","shipments.csv");
-$("#btnShipImport").onclick = ()=> importCSVtoSheet("bulkImportShip", ()=> { loadShips(); loadShipsMini(); });
-$("#btnShipPrint").onclick  = ()=> window.print();
+async function loadShips(){ const dat = await cached("listShip"); renderTable(dat, "#thShip", "#tbShip", "#shipSearch"); }
+on("#btnShipCreate","click", ()=> openForm("出荷予定 作成", SHIP_FIELDS, "saveShip", ()=> { loadShips(); loadShipsMini(); }));
+on("#btnShipExport","click", ()=> exportTableCSV("#tbShip","shipments.csv"));
+on("#btnShipImport","click", ()=> importCSVtoSheet("bulkImportShip", ()=> { loadShips(); loadShipsMini(); }));
+on("#btnShipPrint","click",  ()=> window.print());
 
 /* ---------- ミニ: 本日出荷 & 出荷予定 ---------- */
 async function loadShipsMini(){
@@ -515,7 +332,8 @@ async function loadShipsMini(){
 
   const todayList = [], futureList = [];
   rows.forEach(r=>{
-    const st = String(r[statusCol]||''); const dt = r[dateCol];
+    const st = String(r[statusCol]||'');
+    const dt = r[dateCol];
     if(!dt || /出荷済/.test(st)) return;
     const entry = { po: r[poCol], date: dt, status: st, dest: r[idx.destination]||'' , qty: r[idx.qty]||'' };
     if(isToday(dt)) todayList.push(entry); else if(new Date(dt) > ymd) futureList.push(entry);
@@ -525,86 +343,20 @@ async function loadShipsMini(){
       <div class="ship-item">
         <div><b>${e.po||''}</b> <span class="muted s">${e.dest||''}</span></div>
         <div class="row-between s"><span>${new Date(e.date).toLocaleDateString('ja-JP')}</span><span>${e.qty||''}</span></div>
-      </div>`).join('') || `<div class="muted s">なし</div>`;
+      </div>
+    `).join('') || `<div class="muted s">なし</div>`;
   };
   renderSide(todayList, $("#shipToday"));
   renderSide(futureList, $("#shipPlan"));
 }
-
-/* ---------- 完成品一覧 ---------- */
-const FINISHED_VIEW = [
-  {label:'注番', keys:['po_id','注番']},
-  {label:'得意先', keys:['得意先','customer']},
-  {label:'品名', keys:['品名','item_name']},
-  {label:'品番', keys:['品番','part_no']},
-  {label:'図番', keys:['図番','drawing_no']},
-  {label:'製造番号', keys:['製造番号','製番号']},
-  {label:'数量', keys:['qty','数量']},
-  {label:'完了日', keys:['completed_at']},
-  {label:'備考', keys:['note','備考']}
-];
-async function loadFinished(){
-  const dat = await cached("listFinished", {}, 10000);
-  const th = $("#thFinished"), tb = $("#tbFinished"), search = $("#finishedSearch");
-  const header = dat.header||[]; const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
-  const pick = (row, keys)=> { for(const k of keys){ const i = idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
-
-  th.innerHTML = `<tr>${FINISHED_VIEW.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
-
-  const render = ()=>{
-    const q = (search?.value||'').toLowerCase();
-    tb.innerHTML = '';
-    const rows = (dat.rows||[]).filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-    let i=0; const chunk=150;
-    function paint(){
-      const end=Math.min(i+chunk, rows.length);
-      const frag=document.createDocumentFragment();
-      for(;i<end;i++){
-        const r = rows[i];
-        const tr=document.createElement('tr');
-        tr.innerHTML = FINISHED_VIEW.map(col=>{
-          let v = pick(r, col.keys);
-          if(col.label==='完了日' && v){
-            const d = (v instanceof Date)? v : new Date(v);
-            if(!isNaN(d)) v = d.toLocaleDateString('ja-JP');
-          }
-          return `<td>${v??''}</td>`;
-        }).join('');
-        frag.appendChild(tr);
-      }
-      tb.appendChild(frag);
-      if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
-    }
-    paint();
-  };
-  if(search) search.oninput = debounce(render, 250);
-  render();
-}
-$("#btnFinishedExport")?.addEventListener('click', ()=> exportTableCSV("#tbFinished","finished.csv"));
-
-/* ---------- Users (System Setting) ---------- */
-const USER_FIELDS = [
-  {name:'username', label:'ユーザー名', req:true},
-  {name:'password', label:'パスワード', req:true},
-  {name:'full_name', label:'氏名'},
-  {name:'department', label:'部署'},
-  {name:'role', label:'ロール', type:'select', options:['admin','営業','生産管理','生産管理部','製造','検査']},
-  {name:'is_active', label:'有効', type:'select', options:['true','false']}
-];
-async function loadUsers(){
-  const dat = await cached("listUsers", {}, 10000);
-  renderTable(dat, "#thUsers", "#tbUsers", "#usersSearch");
-}
-$("#btnUserCreate")?.addEventListener('click', ()=> openForm("ユーザー作成", USER_FIELDS, "saveUser", loadUsers));
-$("#btnUsersExport")?.addEventListener('click', ()=> exportTableCSV("#tbUsers", "users.csv"));
 
 /* ---------- Form dialog generator ---------- */
 // openForm(title, fields, api, after, initial?)
 let CURRENT_API = null;
 function openForm(title, fields, api, after, initial={}){
   CURRENT_API = api;
-  $("#dlgTitle").textContent = title;
-  const f = $("#formBody"); f.innerHTML = "";
+  $("#dlgTitle") && ($("#dlgTitle").textContent = title);
+  const f = $("#formBody"); if(!f) return; f.innerHTML = "";
   fields.forEach(x=>{
     const wrap = document.createElement("div");
     wrap.className = "form-item";
@@ -624,29 +376,29 @@ function openForm(title, fields, api, after, initial={}){
     wrap.innerHTML = label + input;
     f.appendChild(wrap);
   });
-  $("#dlgForm").showModal();
+  $("#dlgForm")?.showModal();
 
-  $("#btnDlgSave").onclick = async ()=>{
+  on("#btnDlgSave","click", async ()=>{
     const data = {};
     fields.forEach(x=>{
-      let v = f.querySelector(`[name="${x.name}"]`).value;
+      let v = f.querySelector(`[name="${x.name}"]`)?.value ?? "";
       if(x.type==='date' && v) v = new Date(v).toISOString().slice(0,10);
-      if(x.name==='is_active') v = (String(v)==='true');
       data[x.name] = v;
     });
     try{
       await jsonp(CURRENT_API, { data: JSON.stringify(data), user: JSON.stringify(CURRENT_USER||{}) });
-      $("#dlgForm").close();
+      $("#dlgForm")?.close();
       if(after) await after();
       if(api==="savePlan") await loadOrders();
     }catch(e){ alert("保存失敗: " + e.message); }
-  };
+  });
+  on("#btnDlgCancel","click", ()=> $("#dlgForm")?.close());
 }
-$("#btnDlgCancel").onclick = ()=> $("#dlgForm").close();
 
-/* ---------- Render helper generic ---------- */
+/* ---------- Render helper for listSheet_ ---------- */
 function renderTable(dat, thSel, tbSel, searchSel){
   const th = $(thSel), tb = $(tbSel), search = $(searchSel);
+  if(!th || !tb) return;
   th.innerHTML = `<tr>${dat.header.map(h=>`<th>${h}</th>`).join('')}</tr>`;
   const render = ()=>{
     const q = (search?.value||'').toLowerCase();
@@ -666,18 +418,19 @@ function renderTable(dat, thSel, tbSel, searchSel){
     }
     paint();
   };
-  if(search) search.oninput = debounce(render, 250);
+  search?.addEventListener("input", debounce(render, 250));
   render();
 }
 
-/* ---------- CSV helpers ---------- */
+/* ---------- CSV Export / Import ---------- */
 function exportTableCSV(tbodySel, filename){
   const rows = $$(tbodySel+" tr").map(tr=> [...tr.children].map(td=> td.textContent));
   const csv = rows.map(r => r.map(v=>{
     const s = (v??'').toString().replace(/"/g,'""');
     return `"${s}"`;
   }).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const a = document.createElement('a');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename; a.click();
 }
 function importCSVtoSheet(api, after){
@@ -695,20 +448,16 @@ function importCSVtoSheet(api, after){
   };
   input.click();
 }
-function downloadTemplate(headers, filename){
-  const csv = headers.map(h=>`"${h}"`).join(',') + '\n';
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
-}
 
 /* ---------- QR Scan ---------- */
 let scanStream=null, scanRAF=null;
 function openScanDialog(po){
-  $("#scanResult").textContent = `PO: ${po}`;
-  $("#dlgScan").showModal();
+  $("#scanResult") && ($("#scanResult").textContent = `PO: ${po}`);
+  $("#dlgScan")?.showModal();
 
-  $("#btnScanStart").onclick = async ()=>{
+  on("#btnScanStart","click", async ()=>{
     const video = $("#scanVideo"), canvas=$("#scanCanvas");
+    if(!video || !canvas) return;
     try{
       scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
       video.srcObject = scanStream; await video.play();
@@ -720,16 +469,16 @@ function openScanDialog(po){
         const img = ctx.getImageData(0,0, canvas.width, canvas.height);
         const code = jsQR(img.data, img.width, img.height);
         if(code){
-          $("#scanResult").textContent = `QR: ${code.data}`;
+          $("#scanResult") && ($("#scanResult").textContent = `QR: ${code.data}`);
           if(scanRAF) cancelAnimationFrame(scanRAF);
           if(scanStream) { scanStream.getTracks().forEach(t=> t.stop()); }
 
-          const parts = String(code.data||'').split('|'); // PO|PROCESS|OK|NG|NOTE
+          // QR: PO|PROCESS|OK|NG|NOTE
+          const parts = String(code.data||'').split('|');
           let defaults = {};
           if(parts.length >= 4){
-            const procNorm = normalizeProc(parts[1] || "");
             defaults = {
-              process: procNorm,
+              process: parts[1] || "",
               ok_count: Number(parts[2]||""),
               ng_count: Number(parts[3]||""),
               note: parts[4] || ""
@@ -737,7 +486,6 @@ function openScanDialog(po){
           }else{
             defaults = { process:"", ok_count:"", ng_count:"", note:"" };
           }
-
           openOpDialog(po, defaults);
           return;
         }
@@ -745,22 +493,22 @@ function openScanDialog(po){
       };
       tick();
     }catch(e){ alert("Camera error: "+e.message); }
-  };
+  });
 }
-$("#btnScanClose").onclick = ()=>{
+on("#btnScanClose","click", ()=>{
   if(scanRAF) cancelAnimationFrame(scanRAF);
   if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
-  $("#dlgScan").close();
-};
+  $("#dlgScan")?.close();
+});
 
 /* ---------- Cuaca (Open-Meteo, cached 30m) ---------- */
 async function ensureWeather(){
   try{
     const cacheKey = 'wx_cache_v1';
-    const cached = JSON.parse(localStorage.getItem(cacheKey)||'null');
+    const cachedWx = JSON.parse(localStorage.getItem(cacheKey)||'null');
     const now = Date.now();
-    if(cached && (now - cached.t) < 30*60*1000){ renderWeather(cached.v); return; }
-    let lat=35.6762, lon=139.6503;
+    if(cachedWx && (now - cachedWx.t) < 30*60*1000){ renderWeather(cachedWx.v); return; }
+    let lat=35.6762, lon=139.6503; // Tokyo default
     if(navigator.geolocation){
       await new Promise(res=> navigator.geolocation.getCurrentPosition(
         pos=>{ lat=pos.coords.latitude; lon=pos.coords.longitude; res(); },
@@ -772,17 +520,19 @@ async function ensureWeather(){
     const v = await fetch(url).then(r=>r.json());
     localStorage.setItem(cacheKey, JSON.stringify({v,t:now}));
     renderWeather(v);
-  }catch(_){}
+  }catch(_){ /* silent */ }
 }
 function renderWeather(v){
   if(!v?.current) return;
-  $("#wxTemp").textContent = Math.round(v.current.temperature_2m) + "°C";
-  $("#wxWind").textContent = Math.round(v.current.wind_speed_10m) + " m/s";
-  $("#wxPlace").textContent = v.timezone_abbreviation || "";
+  $("#wxTemp")  && ($("#wxTemp").textContent = Math.round(v.current.temperature_2m) + "°C");
+  $("#wxWind")  && ($("#wxWind").textContent = Math.round(v.current.wind_speed_10m) + " m/s");
+  $("#wxPlace") && ($("#wxPlace").textContent = v.timezone_abbreviation || "");
 }
 
 /* ---------- Utils ---------- */
 function debounce(fn, wait){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); }; }
 
 /* ---------- Init ---------- */
-document.addEventListener("DOMContentLoaded", ()=> setUser(null));
+document.addEventListener("DOMContentLoaded", ()=> {
+  setUser(null); // tampilkan form login
+});
