@@ -34,6 +34,9 @@ body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,'Hiragino 
 .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
 
 .full{width:100%}.grow{flex:1}.hidden{display:none!important}.muted{color:var(--muted)}.s{font-size:.9rem}
+/* Required indicator */
+.req{ color:#dc2626; font-weight:700; margin-left:.25rem }
+.form-item label{ display:flex; align-items:center; gap:.25rem; font-size:.9rem; color:var(--muted) }
 .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
 table.table{width:100%;border-collapse:separate;border-spacing:0}
 .table th,.table td{padding:.6rem .7rem;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;white-space:nowrap}
