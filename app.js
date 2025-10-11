@@ -182,24 +182,55 @@ $("#btnExportOrders").onclick = ()=> exportTableCSV("#tbOrders","orders.csv");
 
 /* ---------- 操作: 手入力 dialog ---------- */
 const PROCESS_OPTIONS = ["準備","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","出荷（組立済）"];
-function openOpDialog(po){
+// === REPLACE fungsi openOpDialog lama dengan versi ini ===
+function openOpDialog(po, defaults = {}){
   $("#opPO").textContent = po;
-  const sel = $("#opProcess"); sel.innerHTML = PROCESS_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join('');
-  $("#opOK").value = ""; $("#opNG").value = ""; $("#opNote").value = "";
+  const sel = $("#opProcess");
+  sel.innerHTML = PROCESS_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join('');
+
+  // Prefill bila ada (dari QR)
+  $("#opProcess").value = defaults.process || PROCESS_OPTIONS[0];
+  $("#opOK").value      = (defaults.ok_count ?? defaults.ok ?? "") === 0 ? 0 : (defaults.ok_count ?? defaults.ok ?? "");
+  $("#opNG").value      = (defaults.ng_count ?? defaults.ng ?? "") === 0 ? 0 : (defaults.ng_count ?? defaults.ng ?? "");
+  $("#opNote").value    = defaults.note || "";
+
   $("#dlgOp").showModal();
+
   $("#btnOpSave").onclick = async ()=>{
-    const ok = Number($("#opOK").value||0);
-    const ng = Number($("#opNG").value||0);
-    const proc = $("#opProcess").value;
-    if(isNaN(ok) || isNaN(ng)) return alert("OK/NG は数値で入力してください");
+    const okStr = $("#opOK").value;
+    const ngStr = $("#opNG").value;
+    const proc  = $("#opProcess").value;
+
+    // === VALIDASI WAJIB ===
     if(!proc) return alert("工程を選択してください");
+    if(okStr === "") return alert("OK 数を入力してください（0 以上）");
+    if(ngStr === "") return alert("NG 数を入力してください（0 以上）");
+
+    const ok = Number(okStr), ng = Number(ngStr);
+    if(Number.isNaN(ok) || ok < 0) return alert("OK 数は 0 以上の数値で入力してください");
+    if(Number.isNaN(ng) || ng < 0) return alert("NG 数は 0 以上の数値で入力してください");
+
     try{
-      await jsonp("saveOp", { data: JSON.stringify({ po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value }) , user: JSON.stringify(CURRENT_USER||{}) });
+      await jsonp("saveOp", {
+        data: JSON.stringify({
+          po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value
+        }),
+        user: JSON.stringify(CURRENT_USER||{})
+      });
       $("#dlgOp").close();
+
+      // Jika dialog scan masih terbuka, tutup & hentikan kamera
+      if($("#dlgScan").open){
+        if(scanRAF) cancelAnimationFrame(scanRAF);
+        if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
+        $("#dlgScan").close();
+      }
+
       await refreshAll();
     }catch(e){ alert("保存失敗: " + e.message); }
   };
 }
+
 $("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
 
 /* ---------- 受注 ---------- */
@@ -395,29 +426,47 @@ function importCSVtoSheet(api, after){
 
 /* ---------- QR Scan ---------- */
 let scanStream=null, scanRAF=null;
+// === REPLACE isi openScanDialog lama dengan versi ini ===
 function openScanDialog(po){
   $("#scanResult").textContent = `PO: ${po}`;
   $("#dlgScan").showModal();
+
   $("#btnScanStart").onclick = async ()=>{
     const video = $("#scanVideo"), canvas=$("#scanCanvas");
     try{
       scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
       video.srcObject = scanStream; await video.play();
       const ctx = canvas.getContext("2d");
+
       const tick = ()=>{
         canvas.width = video.videoWidth; canvas.height = video.videoHeight;
         ctx.drawImage(video, 0,0, canvas.width, canvas.height);
         const img = ctx.getImageData(0,0, canvas.width, canvas.height);
         const code = jsQR(img.data, img.width, img.height);
         if(code){
+          // ====== QR terdeteksi: hentikan kamera & buka dialog 手入力 ======
           $("#scanResult").textContent = `QR: ${code.data}`;
-          // contoh format QR: PO|PROCESS|OK|NG|NOTE
+          if(scanRAF) cancelAnimationFrame(scanRAF);
+          if(scanStream) { scanStream.getTracks().forEach(t=> t.stop()); }
+
+          // Format QR yang didukung: PO|PROCESS|OK|NG|NOTE
           const parts = String(code.data||'').split('|');
-          if(parts.length>=5){
-            jsonp("saveOp", { data: JSON.stringify({ po_id: parts[0], process: parts[1], ok_count: Number(parts[2]||0), ng_count: Number(parts[3]||0), note: parts[4]||'' }), user: JSON.stringify(CURRENT_USER||{}) })
-              .then(()=> refreshAll())
-              .catch(e=> alert("保存失敗: " + e.message));
+          let defaults = {};
+          if(parts.length >= 4){
+            defaults = {
+              process: parts[1] || "",
+              ok_count: Number(parts[2]||""),
+              ng_count: Number(parts[3]||""),
+              note: parts[4] || ""
+            };
+          }else{
+            // Jika format tidak lengkap, pakai kosong supaya user wajib isi
+            defaults = { process:"", ok_count:"", ng_count:"", note:"" };
           }
+
+          // Paksa isi via dialog 手入力
+          openOpDialog(po, defaults);
+          return; // stop loop
         }
         scanRAF = requestAnimationFrame(tick);
       };
@@ -425,6 +474,7 @@ function openScanDialog(po){
     }catch(e){ alert("Camera error: "+e.message); }
   };
 }
+
 $("#btnScanClose").onclick = ()=>{
   if(scanRAF) cancelAnimationFrame(scanRAF);
   if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
