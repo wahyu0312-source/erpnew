@@ -23,7 +23,7 @@ function jsonp(action, params={}){
     const cb = "cb_" + Math.random().toString(36).slice(2);
     params = { ...params, action, callback: cb };
     const s = document.createElement("script");
-    s.src = `${API_BASE}?${qs(params)}`;F
+    s.src = `${API_BASE}?${qs(params)}`;
     let timeout = setTimeout(()=>{ cleanup(); reject(new Error("API timeout")); }, 20000);
     function cleanup(){ delete window[cb]; s.remove(); clearTimeout(timeout); }
     window[cb] = (resp)=>{
@@ -82,27 +82,30 @@ const ROLE_MAP = {
 function setUser(u){
   CURRENT_USER = u || null;
   $("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "";
+
   const pages = ["authView","pageDash","pageSales","pagePlan","pageShip"];
   pages.forEach(p => $("#"+p)?.classList.add("hidden"));
-  // sembunyikan SEMUA menu kanan saat belum login
-  ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToInvPage','btnToFinPage','btnToInvoice','ddSetting','weatherWrap'].forEach(id=> $("#"+id)?.classList.add("hidden"));
+
+  // Sembunyikan semua menu saat belum login
+  ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToInvPage','btnToFinPage','btnToInvoice','ddSetting','weatherWrap']
+    .forEach(id=> $("#"+id)?.classList.add("hidden"));
+
   if(!u){ $("#authView")?.classList.remove("hidden"); return; }
+
   const allow = ROLE_MAP[u.role] || ROLE_MAP[u.department] || ROLE_MAP['admin'];
   if(allow?.nav){
     if(allow.pages.includes('pageDash')) $("#btnToDash").classList.remove("hidden");
     if(allow.pages.includes('pageSales')) $("#btnToSales").classList.remove("hidden");
     if(allow.pages.includes('pagePlan')) $("#btnToPlan").classList.remove("hidden");
     if(allow.pages.includes('pageShip')) $("#btnToShip").classList.remove("hidden");
-     if(allow?.nav){
-  // ...existing show buttons...
-  $("#weatherWrap").classList.remove("hidden");
-  ensureWeather();
-  loadMasters();                // <== tambah ini
-}
-
     $("#ddSetting").classList.remove("hidden");
+
+    // Tampilkan cuaca + load masters
     $("#weatherWrap").classList.remove("hidden");
+    ensureWeather();
+    loadMasters();
   }
+
   show("pageDash");
   refreshAll();
 }
@@ -135,9 +138,7 @@ let ORDERS = [];
 async function loadOrders(){
   ORDERS = await cached("listOrders");
   renderOrders();
-  // setelah orders, muat panel shipment & cuaca
   loadShipsMini();
-  ensureWeather();
 }
 
 /* Virtual render (windowed) untuk tabel besar */
@@ -146,7 +147,6 @@ function renderOrders(){
   const rows = ORDERS.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
   const tb = $("#tbOrders"); tb.innerHTML = "";
 
-  // windowing sederhana
   const chunk = 120; // rows per paint
   let i = 0;
   function paint(){
@@ -173,13 +173,12 @@ function renderOrders(){
       frag.appendChild(tr);
     }
     tb.appendChild(frag);
-    if(i < rows.length) requestIdleCallback(paint);
-    else {
-      $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
-      $$(".btn-op",tb).forEach(b=> b.onclick=(e)=> openOpDialog(e.currentTarget.dataset.po));
-    }
+    if(i < rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
   }
   paint();
+
+  $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
+  $$(".btn-op",tb).forEach(b=> b.onclick=(e)=> openOpDialog(e.currentTarget.dataset.po));
 }
 const debouncedRender = debounce(renderOrders, 250);
 $("#searchQ").addEventListener("input", debouncedRender);
@@ -189,7 +188,7 @@ $("#btnExportOrders").onclick = ()=> exportTableCSV("#tbOrders","orders.csv");
 
 /* ---------- 操作: 手入力 dialog ---------- */
 const PROCESS_OPTIONS = ["準備","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","出荷（組立済）"];
-// === REPLACE fungsi openOpDialog lama dengan versi ini ===
+
 function openOpDialog(po, defaults = {}){
   $("#opPO").textContent = po;
   const sel = $("#opProcess");
@@ -208,7 +207,7 @@ function openOpDialog(po, defaults = {}){
     const ngStr = $("#opNG").value;
     const proc  = $("#opProcess").value;
 
-    // === VALIDASI WAJIB ===
+    // Validasi wajib
     if(!proc) return alert("工程を選択してください");
     if(okStr === "") return alert("OK 数を入力してください（0 以上）");
     if(ngStr === "") return alert("NG 数を入力してください（0 以上）");
@@ -237,7 +236,6 @@ function openOpDialog(po, defaults = {}){
     }catch(e){ alert("保存失敗: " + e.message); }
   };
 }
-
 $("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
 
 /* ---------- 受注 ---------- */
@@ -256,7 +254,7 @@ const SALES_FIELDS = [
   {name:'品名',   label:'品名',   type:'select', options:()=>MASTERS.item_names},
   {name:'品番',   label:'品番',   type:'select', options:()=>MASTERS.part_nos},
   {name:'受注日', label:'受注日', type:'date'},
-  {name:'製造番号', label:'製造番号'}, // optional
+  {name:'製造番号', label:'製造番号'},
   {name:'qty',   label:'数量'},
   {name:'納期',  label:'納期', type:'date'}
 ];
@@ -269,6 +267,18 @@ $("#btnSalesCreate").onclick = ()=> openForm("受注作成", SALES_FIELDS, "save
 $("#btnSalesExport").onclick = ()=> exportTableCSV("#tbSales","sales.csv");
 $("#btnSalesImport").onclick = ()=> importCSVtoSheet("bulkImportSales");
 $("#btnSalesPrint").onclick  = ()=> window.print();
+
+/* Template CSV (受注) */
+function downloadSalesTemplate(){
+  const headers = ['po_id','得意先','図番','品名','品番','受注日','製造番号','qty','納期'];
+  const csv = headers.map(h=>`"${h}"`).join(',') + '\n';
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sales_template.csv';
+  a.click();
+}
+const btnTpl = $("#btnSalesTpl"); if(btnTpl) btnTpl.onclick = downloadSalesTemplate;
 
 /* ---------- 生産計画 ---------- */
 const PLAN_FIELDS = [
@@ -346,8 +356,8 @@ async function loadShipsMini(){
       </div>
     `).join('') || `<div class="muted s">なし</div>`;
   };
-  renderSide(todayList, $("#shipToday"));
-  renderSide(futureList, $("#shipPlan"));
+  const tEl = $("#shipToday"), pEl = $("#shipPlan");
+  if(tEl && pEl){ renderSide(todayList, tEl); renderSide(futureList, pEl); }
 }
 
 /* ---------- Form dialog generator ---------- */
@@ -399,7 +409,6 @@ function renderTable(dat, thSel, tbSel, searchSel){
     const q = (search.value||'').toLowerCase();
     tb.innerHTML = '';
     const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-    // windowed render
     let i=0; const chunk=150;
     function paint(){
       const end=Math.min(i+chunk, rows.length);
@@ -410,7 +419,7 @@ function renderTable(dat, thSel, tbSel, searchSel){
         frag.appendChild(tr);
       }
       tb.appendChild(frag);
-      if(i<rows.length) requestIdleCallback(paint);
+      if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
     }
     paint();
   };
@@ -437,7 +446,6 @@ function importCSVtoSheet(api, after){
     const wb = XLSX.read(buf);
     const ws = wb.Sheets[wb.SheetNames[0]];
     const arr = XLSX.utils.sheet_to_json(ws, {header:1, blankrows:false, defval:''});
-    // Jika baris pertama tampak seperti header (mengandung huruf), lewati
     const looksHeader = arr.length && arr[0].some(c=> typeof c==='string' && /[A-Za-zぁ-んァ-ヴ一-龯]/.test(c));
     const rows = looksHeader ? arr.slice(1) : arr;
     await jsonp(api, { rows: JSON.stringify(rows) });
@@ -446,10 +454,8 @@ function importCSVtoSheet(api, after){
   input.click();
 }
 
-
 /* ---------- QR Scan ---------- */
 let scanStream=null, scanRAF=null;
-// === REPLACE isi openScanDialog lama dengan versi ini ===
 function openScanDialog(po){
   $("#scanResult").textContent = `PO: ${po}`;
   $("#dlgScan").showModal();
@@ -467,12 +473,11 @@ function openScanDialog(po){
         const img = ctx.getImageData(0,0, canvas.width, canvas.height);
         const code = jsQR(img.data, img.width, img.height);
         if(code){
-          // ====== QR terdeteksi: hentikan kamera & buka dialog 手入力 ======
           $("#scanResult").textContent = `QR: ${code.data}`;
           if(scanRAF) cancelAnimationFrame(scanRAF);
           if(scanStream) { scanStream.getTracks().forEach(t=> t.stop()); }
 
-          // Format QR yang didukung: PO|PROCESS|OK|NG|NOTE
+          // Format QR: PO|PROCESS|OK|NG|NOTE
           const parts = String(code.data||'').split('|');
           let defaults = {};
           if(parts.length >= 4){
@@ -483,13 +488,11 @@ function openScanDialog(po){
               note: parts[4] || ""
             };
           }else{
-            // Jika format tidak lengkap, pakai kosong supaya user wajib isi
             defaults = { process:"", ok_count:"", ng_count:"", note:"" };
           }
 
-          // Paksa isi via dialog 手入力
           openOpDialog(po, defaults);
-          return; // stop loop
+          return;
         }
         scanRAF = requestAnimationFrame(tick);
       };
@@ -497,7 +500,6 @@ function openScanDialog(po){
     }catch(e){ alert("Camera error: "+e.message); }
   };
 }
-
 $("#btnScanClose").onclick = ()=>{
   if(scanRAF) cancelAnimationFrame(scanRAF);
   if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
