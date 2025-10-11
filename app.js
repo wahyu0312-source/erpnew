@@ -23,7 +23,7 @@ function jsonp(action, params={}){
     const cb = "cb_" + Math.random().toString(36).slice(2);
     params = { ...params, action, callback: cb };
     const s = document.createElement("script");
-    s.src = `${API_BASE}?${qs(params)}`;
+    s.src = `${API_BASE}?${qs(params)}`;F
     let timeout = setTimeout(()=>{ cleanup(); reject(new Error("API timeout")); }, 20000);
     function cleanup(){ delete window[cb]; s.remove(); clearTimeout(timeout); }
     window[cb] = (resp)=>{
@@ -93,6 +93,13 @@ function setUser(u){
     if(allow.pages.includes('pageSales')) $("#btnToSales").classList.remove("hidden");
     if(allow.pages.includes('pagePlan')) $("#btnToPlan").classList.remove("hidden");
     if(allow.pages.includes('pageShip')) $("#btnToShip").classList.remove("hidden");
+     if(allow?.nav){
+  // ...existing show buttons...
+  $("#weatherWrap").classList.remove("hidden");
+  ensureWeather();
+  loadMasters();                // <== tambah ini
+}
+
     $("#ddSetting").classList.remove("hidden");
     $("#weatherWrap").classList.remove("hidden");
   }
@@ -234,15 +241,26 @@ function openOpDialog(po, defaults = {}){
 $("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
 
 /* ---------- 受注 ---------- */
+let MASTERS = { customers:[], drawings:[], item_names:[], part_nos:[] };
+
+async function loadMasters(){
+  try{
+    MASTERS = await cached("listMasters", {}, 60000);
+  }catch(_){ /* silent */ }
+}
+
 const SALES_FIELDS = [
   {name:'po_id', label:'注番', req:true},
-  {name:'得意先', label:'得意先'},
-  {name:'図番', label:'図番'},
-  {name:'品名', label:'品名'},
-  {name:'品番', label:'品番'},
-  {name:'qty', label:'数量'},
-  {name:'納期', label:'納期', type:'date'}
+  {name:'得意先', label:'得意先', type:'select', options:()=>MASTERS.customers},
+  {name:'図番',   label:'図番',   type:'select', options:()=>MASTERS.drawings},
+  {name:'品名',   label:'品名',   type:'select', options:()=>MASTERS.item_names},
+  {name:'品番',   label:'品番',   type:'select', options:()=>MASTERS.part_nos},
+  {name:'受注日', label:'受注日', type:'date'},
+  {name:'製造番号', label:'製造番号'}, // optional
+  {name:'qty',   label:'数量'},
+  {name:'納期',  label:'納期', type:'date'}
 ];
+
 async function loadSales(){
   const dat = await cached("listSales");
   renderTable(dat, "#thSales", "#tbSales", "#salesSearch");
@@ -343,8 +361,9 @@ function openForm(title, fields, api, after){
     wrap.className = "form-item";
     const label = `<div class="muted s">${x.label}${x.req? ' <span style="color:#c00">*</span>':''}</div>`;
     let input = '';
+    let opts = (typeof x.options === 'function') ? x.options() : (x.options||[]);
     if(x.type==='select'){
-      input = `<select name="${x.name}">${(x.options||[]).map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
+      input = `<select name="${x.name}">${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
     }else if(x.type==='date'){
       input = `<input name="${x.name}" type="date">`;
     }else{
@@ -365,8 +384,8 @@ function openForm(title, fields, api, after){
     try{
       await jsonp(CURRENT_API, { data: JSON.stringify(data), user: JSON.stringify(CURRENT_USER||{}) });
       $("#dlgForm").close();
-      if(after) after(); // refresh
-      if(api==="savePlan") await loadOrders(); // dashboard update
+      if(after) after();
+      if(api==="savePlan") await loadOrders();
     }catch(e){ alert("保存失敗: " + e.message); }
   };
 }
@@ -417,12 +436,16 @@ function importCSVtoSheet(api, after){
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf);
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const arr = XLSX.utils.sheet_to_json(ws, {header:1});
-    await jsonp(api, { rows: JSON.stringify(arr.slice(1)) });
+    const arr = XLSX.utils.sheet_to_json(ws, {header:1, blankrows:false, defval:''});
+    // Jika baris pertama tampak seperti header (mengandung huruf), lewati
+    const looksHeader = arr.length && arr[0].some(c=> typeof c==='string' && /[A-Za-zぁ-んァ-ヴ一-龯]/.test(c));
+    const rows = looksHeader ? arr.slice(1) : arr;
+    await jsonp(api, { rows: JSON.stringify(rows) });
     if(after) after();
   };
   input.click();
 }
+
 
 /* ---------- QR Scan ---------- */
 let scanStream=null, scanRAF=null;
