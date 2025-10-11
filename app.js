@@ -258,11 +258,124 @@ const SALES_FIELDS = [
   {name:'qty',   label:'数量'},
   {name:'納期',  label:'納期', type:'date'}
 ];
+// Kolom view 受注 (label -> kandidat header pada sheet)
+const SALES_VIEW = [
+  {label:'受注日',   keys:['受注日']},
+  {label:'得意先',   keys:['得意先','customer']},
+  {label:'品名',     keys:['品名','item_name']},
+  {label:'品番',     keys:['品番','part_no','item_code']},
+  {label:'図番',     keys:['図番','drawing_no']},
+  {label:'製番号',   keys:['製番号','製造番号']},
+  {label:'数量',     keys:['数量','qty']},
+  {label:'希望納期', keys:['希望納期','納期','due']},
+  {label:'備考',     keys:['備考','note']},
+];
 
 async function loadSales(){
   const dat = await cached("listSales");
-  renderTable(dat, "#thSales", "#tbSales", "#salesSearch");
+  renderSalesSlim(dat);   // <== gunakan renderer custom, bukan renderTable()
 }
+function renderSalesSlim(dat){
+  const th = $("#thSales"), tb = $("#tbSales"), search = $("#salesSearch");
+  const header = dat.header || [];
+  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
+
+  // helper ambil nilai sesuai kandidat keys
+  const pick = (row, keys)=> {
+    for(const k of keys){ const i = idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; }
+    return '';
+  };
+
+  // kolom kunci po_id
+  const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
+
+  // header tampilan
+  th.innerHTML = `<tr>${SALES_VIEW.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr>`;
+
+  const render = ()=>{
+    const q = (search.value||'').toLowerCase();
+    tb.innerHTML = '';
+    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+
+    let i=0; const chunk=150;
+    function paint(){
+      const end=Math.min(i+chunk, rows.length);
+      const frag=document.createDocumentFragment();
+      for(;i<end;i++){
+        const r = rows[i];
+        const po = String(r[idx[keyPO]]||'');
+        const tds = SALES_VIEW.map(col=>{
+          let v = pick(r, col.keys);
+          if(v && (col.label==='受注日' || col.label==='希望納期')){ // tanggal → ja-JP
+            const d = (v instanceof Date) ? v : new Date(v);
+            if(!isNaN(d)) v = d.toLocaleDateString('ja-JP');
+          }
+          return `<td>${v ?? ''}</td>`;
+        }).join('');
+        const tr=document.createElement('tr');
+        tr.innerHTML = `${tds}
+          <td class="center">
+            <div class="row">
+              <button class="btn ghost btn-edit" data-po="${po}"><i class="fa-regular fa-pen-to-square"></i> 編集</button>
+              <button class="btn ghost btn-del"  data-po="${po}"><i class="fa-regular fa-trash-can"></i> 削除</button>
+            </div>
+          </td>`;
+        frag.appendChild(tr);
+      }
+      tb.appendChild(frag);
+      if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
+      if(i>=rows.length){
+        $$(".btn-edit", tb).forEach(b=> b.onclick = (e)=> editSales(e.currentTarget.dataset.po, dat));
+        $$(".btn-del",  tb).forEach(b=> b.onclick = (e)=> deleteSales(e.currentTarget.dataset.po));
+      }
+    }
+    paint();
+  };
+  search.oninput = debounce(render, 250);
+  render();
+}
+
+function rowToObject(dat, po_id){
+  const header = dat.header || [];
+  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
+  const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
+  const row = (dat.rows||[]).find(r => String(r[idx[keyPO]])===String(po_id));
+  if(!row) return null;
+  const obj = {};
+  header.forEach((h,i)=> obj[String(h).trim()] = row[i]);
+  obj.po_id = obj.po_id || obj['注番'] || po_id;
+  return obj;
+}
+
+function editSales(po_id, dat){
+  const obj = rowToObject(dat, po_id);
+  if(!obj) return alert('データが見つかりません');
+
+  const initial = {
+    po_id: obj.po_id,
+    '得意先': obj['得意先'] || obj.customer || '',
+    '図番':   obj['図番'] || obj.drawing_no || '',
+    '品名':   obj['品名'] || obj.item_name || '',
+    '品番':   obj['品番'] || obj.part_no || obj.item_code || '',
+    '受注日': obj['受注日'] || '',
+    '製造番号': obj['製造番号'] || obj['製番号'] || '',
+    'qty':    obj['数量'] || obj.qty || '',
+    '納期':   obj['希望納期'] || obj['納期'] || obj.due || '',
+    '備考':   obj['備考'] || obj.note || ''
+  };
+  openForm("受注 編集", SALES_FIELDS, "saveSales", async ()=>{ await loadSales(); }, initial);
+}
+
+async function deleteSales(po_id){
+  if(!confirm(`注番 ${po_id} を削除しますか？`)) return;
+  try{
+    await jsonp('deleteSales', { po_id });
+    await loadSales();
+  }catch(e){
+    alert('削除失敗: ' + (e?.message || e));
+  }
+}
+
 $("#btnSalesCreate").onclick = ()=> openForm("受注作成", SALES_FIELDS, "saveSales");
 $("#btnSalesExport").onclick = ()=> exportTableCSV("#tbSales","sales.csv");
 $("#btnSalesImport").onclick = ()=> importCSVtoSheet("bulkImportSales");
@@ -360,9 +473,9 @@ async function loadShipsMini(){
   if(tEl && pEl){ renderSide(todayList, tEl); renderSide(futureList, pEl); }
 }
 
-/* ---------- Form dialog generator ---------- */
+// openForm(title, fields, api, after, initial?)
 let CURRENT_API = null;
-function openForm(title, fields, api, after){
+function openForm(title, fields, api, after, initial={}){
   CURRENT_API = api;
   $("#dlgTitle").textContent = title;
   const f = $("#formBody"); f.innerHTML = "";
@@ -372,12 +485,15 @@ function openForm(title, fields, api, after){
     const label = `<div class="muted s">${x.label}${x.req? ' <span style="color:#c00">*</span>':''}</div>`;
     let input = '';
     let opts = (typeof x.options === 'function') ? x.options() : (x.options||[]);
+    const val = (initial[x.name] ?? '');
     if(x.type==='select'){
-      input = `<select name="${x.name}">${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
+      input = `<select name="${x.name}">${opts.map(o=>`<option value="${o}" ${String(o)===String(val)?'selected':''}>${o}</option>`).join('')}</select>`;
     }else if(x.type==='date'){
-      input = `<input name="${x.name}" type="date">`;
+      const v = val ? new Date(val) : '';
+      const iso = (v && !isNaN(v)) ? new Date(v.getTime()-v.getTimezoneOffset()*60000).toISOString().slice(0,10) : '';
+      input = `<input name="${x.name}" type="date" value="${iso}">`;
     }else{
-      input = `<input name="${x.name}" placeholder="${x.label}">`;
+      input = `<input name="${x.name}" placeholder="${x.label}" value="${val??''}">`;
     }
     wrap.innerHTML = label + input;
     f.appendChild(wrap);
@@ -394,11 +510,12 @@ function openForm(title, fields, api, after){
     try{
       await jsonp(CURRENT_API, { data: JSON.stringify(data), user: JSON.stringify(CURRENT_USER||{}) });
       $("#dlgForm").close();
-      if(after) after();
+      if(after) await after();
       if(api==="savePlan") await loadOrders();
     }catch(e){ alert("保存失敗: " + e.message); }
   };
 }
+
 $("#btnDlgCancel").onclick = ()=> $("#dlgForm").close();
 
 /* ---------- Render helper for listSheet_ ---------- */
