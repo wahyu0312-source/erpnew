@@ -135,10 +135,39 @@ function setUser(u){
 }
 
 /* ---------- Nav ---------- */
+/* ---------- Nav (SAFE BINDINGS) ---------- */
+// Tampilkan 1 halaman dan sembunyikan yang lain
 function show(id){
-  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageUsers"].forEach(p=>$("#"+p)?.classList.add("hidden"));
+  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageUsers"]
+    .forEach(p => $("#"+p)?.classList.add("hidden"));
   $("#"+id)?.classList.remove("hidden");
 }
+
+// Helper aman untuk binding event ke elemen yang mungkin belum ada
+const on = (sel, ev, fn) => {
+  const el = $(sel);
+  if (el) el.addEventListener(ev, fn);
+};
+
+// Tombol navigasi
+on("#btnToDash",     "click", () => { show("pageDash");     refreshAll(); });
+on("#btnToSales",    "click", () => { show("pageSales");    loadSales();  });
+on("#btnToPlan",     "click", () => { show("pagePlan");     loadPlans();  });
+on("#btnToShip",     "click", () => { show("pageShip");     loadShips();  });
+
+// Opsional (jika halaman ini memang ada di HTML + fungsi loader tersedia)
+on("#btnToFinished", "click", () => {
+  show("pageFinished");
+  if (typeof loadFinished === "function") loadFinished();
+});
+on("#btnToUsers",    "click", () => {
+  show("pageUsers");
+  if (typeof loadUsers === "function") loadUsers();
+});
+
+// Logout
+on("#btnLogout",     "click", () => setUser(null));
+
 $("#btnToDash").onclick=()=>{ show("pageDash"); refreshAll(); };
 $("#btnToSales").onclick=()=>{ show("pageSales"); loadSales(); };
 $("#btnToPlan").onclick =()=>{ show("pagePlan");  loadPlans(); };
