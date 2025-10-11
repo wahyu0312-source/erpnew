@@ -87,4 +87,7 @@ dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
 }
 #weatherWrap i{ opacity:.95 }
 #weatherWrap span{ color:#fff }
+.table .row .btn { padding:.35rem .6rem; font-size:.85rem }
+.table tbody tr:hover .btn { filter:brightness(0.98) }
+
 
