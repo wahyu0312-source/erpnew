@@ -39,7 +39,9 @@
       <button id="btnToPlan"    class="btn ghost hidden"><i class="fa-solid fa-list-check"></i> 生産計画</button>
       <button id="btnToShip"    class="btn ghost hidden"><i class="fa-solid fa-truck"></i> 出荷予定</button>
       <button id="btnToInvPage" class="btn ghost hidden"><i class="fa-solid fa-boxes-stacked"></i> 在庫</button>
-      <button id="btnToFinPage" class="btn ghost hidden"><i class="fa-regular fa-square-check"></i> 完成品一覧</button>
+      <button id="btnToFinPage" class="btn hidden">
+  <i class="fa-regular fa-box-archive"></i> 完成品一覧
+</button>
       <button id="btnToInvoice" class="btn ghost hidden"><i class="fa-regular fa-file-lines"></i> 請求書</button>
 
       <details class="dropdown-inline hidden" id="ddSetting">
@@ -179,7 +181,28 @@
       </div>
     </section>
   </main>
-
+<!-- ===== 完成品一覧 ===== -->
+<section id="pageFinished" class="hidden">
+  <div class="card">
+    <div class="card-head row-between">
+      <div class="row gap">
+        <i class="fa-regular fa-box-archive"></i>
+        <b>完成品一覧</b>
+      </div>
+      <div class="row gap">
+        <input id="finSearch" class="input" placeholder="検索..." />
+        <button id="btnFinExport" class="btn"><i class="fa-regular fa-file-csv"></i> Export</button>
+        <button id="btnFinPrint" class="btn"><i class="fa-regular fa-print"></i> Print</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead id="thFin"></thead>
+        <tbody id="tbFin"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
   <!-- Dialog: Create / Edit -->
   <dialog id="dlgForm" class="paper">
     <div class="body">
