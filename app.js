@@ -1,12 +1,13 @@
 /* =================================================
-   JSONP Frontend
+   JSONP Frontend (Optimized)
    - Dashboard status merge StatusLog
    - CRUD: 受注 / 生産計画 / 出荷予定
+   - 操作: QR scanner + 手入力 (OK/NG/工程)
    - Import / Export / Print
-   - QR scanner (jsQR)
+   - Cuaca (Open-Meteo, cached)
    ================================================= */
 
-/** GANTI dengan Web App URL (akhiran /exec) */
+/** Web App URL (akhiran /exec) */
 const API_BASE = "https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec";
 
 const $  = (q,el=document)=> el.querySelector(q);
@@ -23,14 +24,28 @@ function jsonp(action, params={}){
     params = { ...params, action, callback: cb };
     const s = document.createElement("script");
     s.src = `${API_BASE}?${qs(params)}`;
+    let timeout = setTimeout(()=>{ cleanup(); reject(new Error("API timeout")); }, 20000);
+    function cleanup(){ delete window[cb]; s.remove(); clearTimeout(timeout); }
     window[cb] = (resp)=>{
-      delete window[cb]; s.remove();
+      cleanup();
       if(resp && resp.ok) resolve(resp.data);
       else reject(new Error((resp && resp.error) || "API error"));
     };
-    s.onerror = ()=>{ delete window[cb]; s.remove(); reject(new Error("JSONP load error")); };
+    s.onerror = ()=>{ cleanup(); reject(new Error("JSONP load error")); };
     document.body.appendChild(s);
   });
+}
+
+/* ---------- Simple MEM cache for API ---------- */
+const apiCache = new Map();
+async function cached(action, params={}, ttlMs=15000){
+  const key = action + ":" + JSON.stringify(params||{});
+  const hit = apiCache.get(key);
+  const now = Date.now();
+  if(hit && now-hit.t < ttlMs) return hit.v;
+  const v = await jsonp(action, params);
+  apiCache.set(key, {v, t: now});
+  return v;
 }
 
 /* ---------- Badges ---------- */
@@ -41,7 +56,7 @@ const procToChip = (p)=>{
   if(/外注加工|加工/.test(p)) return `<span class="chip p-press"><i class="fa-solid fa-compass-drafting"></i>${p}</span>`;
   if(/組立/.test(p)) return `<span class="chip p-assembly"><i class="fa-solid fa-screwdriver-wrench"></i>${p}</span>`;
   if(/検査/.test(p)) return `<span class="chip p-inspection"><i class="fa-regular fa-square-check"></i>${p}</span>`;
-  return `<span class="chip p-other"><i class="fa-regular fa-square"></i>${p}</span>`;
+  return `<span class="chip p-other"><i class="fa-regular fa-square"></i>${p||'—'}</span>`;
 };
 const statusToBadge = (s)=>{
   s = String(s||"");
@@ -54,7 +69,7 @@ const statusToBadge = (s)=>{
   return `<span class="badge"><i class="fa-regular fa-clock"></i>${s||"—"}</span>`;
 };
 
-/* ---------- Auth & Role (sederhana) ---------- */
+/* ---------- Auth & Role ---------- */
 let CURRENT_USER = null;
 const ROLE_MAP = {
   'admin': { pages:['pageDash','pageSales','pagePlan','pageShip'], nav:true },
@@ -69,7 +84,8 @@ function setUser(u){
   $("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "";
   const pages = ["authView","pageDash","pageSales","pagePlan","pageShip"];
   pages.forEach(p => $("#"+p)?.classList.add("hidden"));
-  ['btnToDash','btnToSales','btnToPlan','btnToShip','ddSetting'].forEach(id=> $("#"+id)?.classList.add("hidden"));
+  // sembunyikan SEMUA menu kanan saat belum login
+  ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToInvPage','btnToFinPage','btnToInvoice','ddSetting','weatherWrap'].forEach(id=> $("#"+id)?.classList.add("hidden"));
   if(!u){ $("#authView")?.classList.remove("hidden"); return; }
   const allow = ROLE_MAP[u.role] || ROLE_MAP[u.department] || ROLE_MAP['admin'];
   if(allow?.nav){
@@ -78,6 +94,7 @@ function setUser(u){
     if(allow.pages.includes('pagePlan')) $("#btnToPlan").classList.remove("hidden");
     if(allow.pages.includes('pageShip')) $("#btnToShip").classList.remove("hidden");
     $("#ddSetting").classList.remove("hidden");
+    $("#weatherWrap").classList.remove("hidden");
   }
   show("pageDash");
   refreshAll();
@@ -106,34 +123,84 @@ $("#btnLogin").onclick = async ()=>{
   }catch(e){ alert("ログイン失敗: " + (e?.message || e)); }
 };
 
-/* ---------- Dashboard Orders ---------- */
+/* ---------- Dashboard Orders + 操作 ---------- */
+let ORDERS = [];
 async function loadOrders(){
-  const list = await jsonp("listOrders");
-  const q = ($("#searchQ").value||"").trim().toLowerCase();
-  const rows = list.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-  const tb = $("#tbOrders"); tb.innerHTML = "";
-  for(const r of rows){
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><div class="s muted">注番</div><div><b>${r.po_id||""}</b></div><div class="muted s">${r["得意先"]||"—"}</div></td>
-      <td>${r["品名"]||"—"}</td>
-      <td class="center">${r["品番"]||"—"}</td>
-      <td class="center">${r["図番"]||"—"}</td>
-      <td class="center">${statusToBadge(r.status)}</td>
-      <td class="center">${procToChip(r.current_process)}</td>
-      <td class="center">${fmt(r.updated_at)}</td>
-      <td class="center">${r.updated_by||"—"}</td>
-      <td class="center">
-        <div class="row">
-          <button class="btn ghost btn-scan" data-po="${r.po_id}"><i class="fa-solid fa-qrcode"></i> スキャン</button>
-        </div>
-      </td>`;
-    tb.appendChild(tr);
-  }
-  $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
+  ORDERS = await cached("listOrders");
+  renderOrders();
+  // setelah orders, muat panel shipment & cuaca
+  loadShipsMini();
+  ensureWeather();
 }
+
+/* Virtual render (windowed) untuk tabel besar */
+function renderOrders(){
+  const q = ($("#searchQ").value||"").trim().toLowerCase();
+  const rows = ORDERS.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+  const tb = $("#tbOrders"); tb.innerHTML = "";
+
+  // windowing sederhana
+  const chunk = 120; // rows per paint
+  let i = 0;
+  function paint(){
+    const end = Math.min(i+chunk, rows.length);
+    const frag = document.createDocumentFragment();
+    for(; i<end; i++){
+      const r = rows[i];
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><div class="s muted">注番</div><div><b>${r.po_id||""}</b></div><div class="muted s">${r["得意先"]||"—"}</div></td>
+        <td>${r["品名"]||"—"}</td>
+        <td class="center">${r["品番"]||"—"}</td>
+        <td class="center">${r["図番"]||"—"}</td>
+        <td class="center">${statusToBadge(r.status)}</td>
+        <td class="center">${procToChip(r.current_process)}</td>
+        <td class="center">${fmt(r.updated_at)}</td>
+        <td class="center">${r.updated_by||"—"}</td>
+        <td class="center">
+          <div class="row">
+            <button class="btn ghost btn-scan" data-po="${r.po_id}"><i class="fa-solid fa-qrcode"></i> スキャン</button>
+            <button class="btn ghost btn-op"   data-po="${r.po_id}"><i class="fa-solid fa-keyboard"></i> 手入力</button>
+          </div>
+        </td>`;
+      frag.appendChild(tr);
+    }
+    tb.appendChild(frag);
+    if(i < rows.length) requestIdleCallback(paint);
+    else {
+      $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
+      $$(".btn-op",tb).forEach(b=> b.onclick=(e)=> openOpDialog(e.currentTarget.dataset.po));
+    }
+  }
+  paint();
+}
+const debouncedRender = debounce(renderOrders, 250);
+$("#searchQ").addEventListener("input", debouncedRender);
+
 async function refreshAll(){ await loadOrders(); }
 $("#btnExportOrders").onclick = ()=> exportTableCSV("#tbOrders","orders.csv");
+
+/* ---------- 操作: 手入力 dialog ---------- */
+const PROCESS_OPTIONS = ["準備","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","出荷（組立済）"];
+function openOpDialog(po){
+  $("#opPO").textContent = po;
+  const sel = $("#opProcess"); sel.innerHTML = PROCESS_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join('');
+  $("#opOK").value = ""; $("#opNG").value = ""; $("#opNote").value = "";
+  $("#dlgOp").showModal();
+  $("#btnOpSave").onclick = async ()=>{
+    const ok = Number($("#opOK").value||0);
+    const ng = Number($("#opNG").value||0);
+    const proc = $("#opProcess").value;
+    if(isNaN(ok) || isNaN(ng)) return alert("OK/NG は数値で入力してください");
+    if(!proc) return alert("工程を選択してください");
+    try{
+      await jsonp("saveOp", { data: JSON.stringify({ po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value }) , user: JSON.stringify(CURRENT_USER||{}) });
+      $("#dlgOp").close();
+      await refreshAll();
+    }catch(e){ alert("保存失敗: " + e.message); }
+  };
+}
+$("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
 
 /* ---------- 受注 ---------- */
 const SALES_FIELDS = [
@@ -146,7 +213,7 @@ const SALES_FIELDS = [
   {name:'納期', label:'納期', type:'date'}
 ];
 async function loadSales(){
-  const dat = await jsonp("listSales");
+  const dat = await cached("listSales");
   renderTable(dat, "#thSales", "#tbSales", "#salesSearch");
 }
 $("#btnSalesCreate").onclick = ()=> openForm("受注作成", SALES_FIELDS, "saveSales");
@@ -161,14 +228,14 @@ const PLAN_FIELDS = [
   {name:'図番', label:'図番'},
   {name:'品名', label:'品名'},
   {name:'品番', label:'品番'},
-  {name:'current_process', label:'工程(開始)', type:'select', options:["準備","シャッター溶接","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","出荷（組立済）"]},
+  {name:'current_process', label:'工程(開始)', type:'select', options: PROCESS_OPTIONS},
   {name:'status', label:'状態', type:'select', options:["進行","組立中","組立済","検査中","検査済","出荷準備","出荷済"]},
   {name:'start_date', label:'開始日', type:'date'},
   {name:'due_date', label:'完了予定', type:'date'},
   {name:'note', label:'備考'}
 ];
 async function loadPlans(){
-  const dat = await jsonp("listPlans");
+  const dat = await cached("listPlans");
   renderTable(dat, "#thPlan", "#tbPlan", "#planSearch");
 }
 $("#btnPlanCreate").onclick = ()=> openForm("生産計画 作成", PLAN_FIELDS, "savePlan", ()=> { loadPlans(); loadOrders(); });
@@ -189,13 +256,50 @@ const SHIP_FIELDS = [
   {name:'note', label:'備考'}
 ];
 async function loadShips(){
-  const dat = await jsonp("listShip");
+  const dat = await cached("listShip");
   renderTable(dat, "#thShip", "#tbShip", "#shipSearch");
 }
-$("#btnShipCreate").onclick = ()=> openForm("出荷予定 作成", SHIP_FIELDS, "saveShip", ()=> { loadShips(); });
+$("#btnShipCreate").onclick = ()=> openForm("出荷予定 作成", SHIP_FIELDS, "saveShip", ()=> { loadShips(); loadShipsMini(); });
 $("#btnShipExport").onclick = ()=> exportTableCSV("#tbShip","shipments.csv");
-$("#btnShipImport").onclick = ()=> importCSVtoSheet("bulkImportShip", ()=> loadShips());
+$("#btnShipImport").onclick = ()=> importCSVtoSheet("bulkImportShip", ()=> { loadShips(); loadShipsMini(); });
 $("#btnShipPrint").onclick  = ()=> window.print();
+
+/* ---------- ミニ: 本日出荷 & 出荷予定 ---------- */
+async function loadShipsMini(){
+  const dat = await cached("listShip", {}, 10000);
+  const rows = dat.rows || [];
+  const head = dat.header || [];
+  const idx = Object.fromEntries(head.map((h,i)=>[h,i]));
+  const today = new Date(); const ymd = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const isToday = (s)=>{
+    const t = new Date(s);
+    return t.getFullYear()===ymd.getFullYear() && t.getMonth()===ymd.getMonth() && t.getDate()===ymd.getDate();
+  };
+  const statusCol = idx.status ?? idx['状態'];
+  const dateCol   = idx.scheduled_date ?? idx['出荷日'] ?? idx['納期'];
+  const poCol     = idx.po_id ?? idx['注番'];
+
+  const todayList = [];
+  const futureList = [];
+  rows.forEach(r=>{
+    const st = String(r[statusCol]||'');
+    const dt = r[dateCol];
+    if(!dt || /出荷済/.test(st)) return;
+    const entry = { po: r[poCol], date: dt, status: st, dest: r[idx.destination]||'' , qty: r[idx.qty]||'' };
+    if(isToday(dt)) todayList.push(entry);
+    else if(new Date(dt) > ymd) futureList.push(entry);
+  });
+  const renderSide = (arr, el)=>{
+    el.innerHTML = arr.slice(0,50).map(e=>`
+      <div class="ship-item">
+        <div><b>${e.po||''}</b> <span class="muted s">${e.dest||''}</span></div>
+        <div class="row-between s"><span>${new Date(e.date).toLocaleDateString('ja-JP')}</span><span>${e.qty||''}</span></div>
+      </div>
+    `).join('') || `<div class="muted s">なし</div>`;
+  };
+  renderSide(todayList, $("#shipToday"));
+  renderSide(futureList, $("#shipPlan"));
+}
 
 /* ---------- Form dialog generator ---------- */
 let CURRENT_API = null;
@@ -244,15 +348,23 @@ function renderTable(dat, thSel, tbSel, searchSel){
   const render = ()=>{
     const q = (search.value||'').toLowerCase();
     tb.innerHTML = '';
-    dat.rows
-      .filter(r => !q || JSON.stringify(r).toLowerCase().includes(q))
-      .forEach(r=>{
-        const tr = document.createElement('tr');
-        tr.innerHTML = r.map(c=>`<td>${c??''}</td>`).join('');
-        tb.appendChild(tr);
-      });
+    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+    // windowed render
+    let i=0; const chunk=150;
+    function paint(){
+      const end=Math.min(i+chunk, rows.length);
+      const frag=document.createDocumentFragment();
+      for(;i<end;i++){
+        const tr=document.createElement('tr');
+        tr.innerHTML = rows[i].map(c=>`<td>${c??''}</td>`).join('');
+        frag.appendChild(tr);
+      }
+      tb.appendChild(frag);
+      if(i<rows.length) requestIdleCallback(paint);
+    }
+    paint();
   };
-  search.oninput = render;
+  search.oninput = debounce(render, 250);
   render();
 }
 
@@ -275,7 +387,6 @@ function importCSVtoSheet(api, after){
     const wb = XLSX.read(buf);
     const ws = wb.Sheets[wb.SheetNames[0]];
     const arr = XLSX.utils.sheet_to_json(ws, {header:1});
-    // Kirim ke backend
     await jsonp(api, { rows: JSON.stringify(arr.slice(1)) });
     if(after) after();
   };
@@ -287,29 +398,73 @@ let scanStream=null, scanRAF=null;
 function openScanDialog(po){
   $("#scanResult").textContent = `PO: ${po}`;
   $("#dlgScan").showModal();
+  $("#btnScanStart").onclick = async ()=>{
+    const video = $("#scanVideo"), canvas=$("#scanCanvas");
+    try{
+      scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
+      video.srcObject = scanStream; await video.play();
+      const ctx = canvas.getContext("2d");
+      const tick = ()=>{
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0,0, canvas.width, canvas.height);
+        const img = ctx.getImageData(0,0, canvas.width, canvas.height);
+        const code = jsQR(img.data, img.width, img.height);
+        if(code){
+          $("#scanResult").textContent = `QR: ${code.data}`;
+          // contoh format QR: PO|PROCESS|OK|NG|NOTE
+          const parts = String(code.data||'').split('|');
+          if(parts.length>=5){
+            jsonp("saveOp", { data: JSON.stringify({ po_id: parts[0], process: parts[1], ok_count: Number(parts[2]||0), ng_count: Number(parts[3]||0), note: parts[4]||'' }), user: JSON.stringify(CURRENT_USER||{}) })
+              .then(()=> refreshAll())
+              .catch(e=> alert("保存失敗: " + e.message));
+          }
+        }
+        scanRAF = requestAnimationFrame(tick);
+      };
+      tick();
+    }catch(e){ alert("Camera error: "+e.message); }
+  };
 }
-$("#btnScanStart").onclick = async ()=>{
-  const video = $("#scanVideo"), canvas=$("#scanCanvas");
-  try{
-    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-    video.srcObject = scanStream; await video.play();
-    const ctx = canvas.getContext("2d");
-    const tick = ()=>{
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0,0, canvas.width, canvas.height);
-      const img = ctx.getImageData(0,0, canvas.width, canvas.height);
-      const code = jsQR(img.data, img.width, img.height);
-      if(code){ $("#scanResult").textContent = `QR: ${code.data}`; }
-      scanRAF = requestAnimationFrame(tick);
-    };
-    tick();
-  }catch(e){ alert("Camera error: "+e.message); }
-};
 $("#btnScanClose").onclick = ()=>{
   if(scanRAF) cancelAnimationFrame(scanRAF);
   if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
   $("#dlgScan").close();
 };
+
+/* ---------- Cuaca (Open-Meteo, cached 30m) ---------- */
+async function ensureWeather(){
+  try{
+    const cacheKey = 'wx_cache_v1';
+    const cached = JSON.parse(localStorage.getItem(cacheKey)||'null');
+    const now = Date.now();
+    if(cached && (now - cached.t) < 30*60*1000){
+      renderWeather(cached.v); return;
+    }
+    let lat=35.6762, lon=139.6503; // Tokyo default
+    if(navigator.geolocation){
+      await new Promise(res=> navigator.geolocation.getCurrentPosition(
+        pos=>{ lat=pos.coords.latitude; lon=pos.coords.longitude; res(); },
+        ()=> res(),
+        {maximumAge: 600000, timeout: 2000}
+      ));
+    }
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m&hourly=temperature_2m&timezone=auto`;
+    const v = await fetch(url).then(r=>r.json());
+    localStorage.setItem(cacheKey, JSON.stringify({v,t:now}));
+    renderWeather(v);
+  }catch(_){ /* silent */ }
+}
+function renderWeather(v){
+  if(!v?.current) return;
+  $("#wxTemp").textContent = Math.round(v.current.temperature_2m) + "°C";
+  $("#wxWind").textContent = Math.round(v.current.wind_speed_10m) + " m/s";
+  $("#wxPlace").textContent = v.timezone_abbreviation || "";
+}
+
+/* ---------- Utils ---------- */
+function debounce(fn, wait){
+  let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); };
+}
 
 /* ---------- Init ---------- */
 document.addEventListener("DOMContentLoaded", ()=> setUser(null));
