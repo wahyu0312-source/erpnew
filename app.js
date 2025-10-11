@@ -366,7 +366,7 @@ $("#btnSalesTpl")?.addEventListener('click', ()=>{
   a.href = URL.createObjectURL(blob); a.download = 'sales_template.csv'; a.click();
 });
 
-/* ---------- 生産計画 ---------- */
+/* ---------- 生産計画 (整列した列＋和名ヘッダ) ---------- */
 const PLAN_FIELDS = [
   {name:'po_id', label:'注番', type:'select', options:()=>MASTERS.po_ids, free:true, req:true},
   {name:'得意先', label:'得意先', type:'select', options:()=>MASTERS.customers, free:true},
@@ -377,12 +377,82 @@ const PLAN_FIELDS = [
   {name:'status', label:'状態', type:'select', options:["進行","組立中","組立済","検査中","検査済","出荷準備","出荷済"]},
   {name:'start_date', label:'開始日', type:'date'},
   {name:'due_date', label:'完了予定', type:'date'},
+  {name:'qty', label:'数量'},
   {name:'note', label:'備考'}
 ];
+
+/* 表示する列だけ定義（和名固定） */
+const PLAN_VIEW = [
+  {label:'注番',     keys:['po_id','注番']},
+  {label:'得意先',   keys:['得意先','customer']},
+  {label:'品番',     keys:['品番','part_no','item_code']},
+  {label:'品名',     keys:['品名','item_name']},
+  {label:'製造番号', keys:['製造番号','製番号','serial','lot']},
+  {label:'図番',     keys:['図番','drawing_no']},
+  {label:'作成者',   keys:['created_by','作成者']},
+  {label:'生産開始', keys:['start_date','開始日','created_at']},
+  {label:'数量',     keys:['qty','数量']},
+  {label:'納期',     keys:['due_date','完了予定','納期','due']}
+];
+
 async function loadPlans(){
   const dat = await cached("listPlans");
-  renderTable(dat, "#thPlan", "#tbPlan", "#planSearch");
+  renderPlansSlim(dat);
 }
+
+/* テーブル描画（和名＋必要列のみ） */
+function renderPlansSlim(dat){
+  const th = $("#thPlan"), tb = $("#tbPlan"), search = $("#planSearch");
+  const header = dat.header || [];
+  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
+  const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
+
+  const pick = (row, keys)=> { 
+    for(const k of keys){ const i = idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; }
+    return '';
+  };
+  const fmtDate = (v)=>{
+    if(!v) return '';
+    const d = (v instanceof Date)? v : new Date(v);
+    return isNaN(d) ? '' : d.toLocaleDateString('ja-JP');
+  };
+
+  th.innerHTML = `<tr>${PLAN_VIEW.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
+
+  const render = ()=>{
+    const q = (search?.value||'').toLowerCase();
+    tb.innerHTML = '';
+    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+    let i=0; const chunk=150;
+
+    function paint(){
+      const end=Math.min(i+chunk, rows.length);
+      const frag=document.createDocumentFragment();
+      for(;i<end;i++){
+        const r = rows[i];
+        const po = String(r[idx[keyPO]]||'');
+
+        const tds = PLAN_VIEW.map(col=>{
+          let v = pick(r, col.keys);
+          if(['生産開始','納期'].includes(col.label)) v = fmtDate(v);
+          return `<td>${v ?? ''}</td>`;
+        }).join('');
+
+        const tr=document.createElement('tr');
+        tr.innerHTML = tds;
+        frag.appendChild(tr);
+      }
+      tb.appendChild(frag);
+      if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
+    }
+    paint();
+  };
+
+  if(search) search.oninput = debounce(render, 250);
+  render();
+}
+
+/* ボタン類はそのまま使えます */
 $("#btnPlanCreate").onclick = ()=> openForm("生産計画 作成", PLAN_FIELDS, "savePlan", ()=> { loadPlans(); loadOrders(); });
 $("#btnPlanExport").onclick = ()=> exportTableCSV("#tbPlan","plans.csv");
 $("#btnPlanImport").onclick = ()=> importCSVtoSheet("bulkImportPlans", ()=> { loadPlans(); loadOrders(); });
