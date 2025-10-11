@@ -1,6 +1,6 @@
 /* =================================================
    JSONP Frontend (Optimized)
-   - Dashboard status merge StatusLog
+   - Dashboard merge StatusLog
    - CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧
    - 操作: QR scanner + 手入力 (OK/NG/工程)
    - Import / Export / Print
@@ -65,16 +65,29 @@ const statusToBadge = (s)=>{
   return `<span class="badge"><i class="fa-regular fa-clock"></i>${s||"—"}</span>`;
 };
 
+/* ---------- Status mapping (工程 → 状況) ---------- */
+function procToStatus(p){
+  p = String(p||'');
+  if(/組立中/.test(p)) return '組立中';
+  if(/組立済/.test(p)) return '組立済';
+  if(/検査中/.test(p)) return '検査中';
+  if(/検査済/.test(p)) return '検査済';
+  if(/出荷準備/.test(p)) return '出荷準備';
+  if(/出荷済|出荷\(組立済\)|出荷(組立済)/.test(p)) return '出荷済';
+  return '進行';
+}
+
 /* ---------- Auth & Role ---------- */
 let CURRENT_USER = null;
 const ROLE_MAP = {
-  'admin': { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished'], nav:true },
-  '営業': { pages:['pageSales','pageDash','pageFinished'], nav:true },
-  '生産管理': { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
-  '生産管理部': { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
-  '製造': { pages:['pageDash','pageFinished'], nav:true },
-  '検査': { pages:['pageDash','pageFinished'], nav:true }
+  'admin':       { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished'], nav:true },
+  '営業':        { pages:['pageSales','pageDash','pageFinished'], nav:true },
+  '生産管理':     { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
+  '生産管理部':    { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
+  '製造':        { pages:['pageDash','pageFinished'], nav:true },
+  '検査':        { pages:['pageDash','pageFinished'], nav:true }
 };
+
 function setUser(u){
   CURRENT_USER = u || null;
   $("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "";
@@ -89,13 +102,12 @@ function setUser(u){
 
   const allow = ROLE_MAP[u.role] || ROLE_MAP[u.department] || ROLE_MAP['admin'];
   if(allow?.nav){
-    if(allow.pages.includes('pageDash')) $("#btnToDash").classList.remove("hidden");
-    if(allow.pages.includes('pageSales')) $("#btnToSales").classList.remove("hidden");
-    if(allow.pages.includes('pagePlan')) $("#btnToPlan").classList.remove("hidden");
-    if(allow.pages.includes('pageShip')) $("#btnToShip").classList.remove("hidden");
-    if(allow.pages.includes('pageFinished')) $("#btnToFinPage").classList.remove("hidden");
+    if(allow.pages.includes('pageDash'))      $("#btnToDash").classList.remove("hidden");
+    if(allow.pages.includes('pageSales'))     $("#btnToSales").classList.remove("hidden");
+    if(allow.pages.includes('pagePlan'))      $("#btnToPlan").classList.remove("hidden");
+    if(allow.pages.includes('pageShip'))      $("#btnToShip").classList.remove("hidden");
+    if(allow.pages.includes('pageFinished'))  $("#btnToFinPage").classList.remove("hidden");
     $("#ddSetting").classList.remove("hidden");
-
     $("#weatherWrap").classList.remove("hidden");
     ensureWeather();
     loadMasters();
@@ -107,15 +119,16 @@ function setUser(u){
 
 /* ---------- Nav ---------- */
 function show(id){
-  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished"].forEach(p=>$("#"+p)?.classList.add("hidden"));
+  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished"]
+    .forEach(p=> $("#"+p)?.classList.add("hidden"));
   $("#"+id)?.classList.remove("hidden");
 }
-$("#btnToDash").onclick=()=>{ show("pageDash"); refreshAll(); };
-$("#btnToSales").onclick=()=>{ show("pageSales"); loadSales(); };
-$("#btnToPlan").onclick =()=>{ show("pagePlan");  loadPlans(); };
-$("#btnToShip").onclick =()=>{ show("pageShip");  loadShips(); };
-$("#btnToFinPage").onclick =()=>{ show("pageFinished"); loadFinished(); };
-$("#btnLogout").onclick  =()=> setUser(null);
+$("#btnToDash").onclick    = ()=>{ show("pageDash");     refreshAll(); };
+$("#btnToSales").onclick   = ()=>{ show("pageSales");    loadSales();  };
+$("#btnToPlan").onclick    = ()=>{ show("pagePlan");     loadPlans();  };
+$("#btnToShip").onclick    = ()=>{ show("pageShip");     loadShips();  };
+$("#btnToFinPage").onclick = ()=>{ show("pageFinished"); loadFinished(); };
+$("#btnLogout").onclick    = ()=> setUser(null);
 
 /* ---------- Login (enter to submit) ---------- */
 $("#btnLogin").onclick = loginSubmit;
@@ -183,19 +196,10 @@ async function refreshAll(){ await loadOrders(); }
 $("#btnExportOrders").onclick = ()=> exportTableCSV("#tbOrders","orders.csv");
 
 /* ---------- 操作: 手入力 dialog ---------- */
-// proses mengikuti alur yang diminta
 const PROCESS_OPTIONS = [
-  "準備",
-  "レザー加工",
-  "曲げ加工",
-  "外注加工/組立",
-  "組立中",
-  "組立済",
-  "検査中",
-  "検査済",
-  "出荷(組立済)",
-  "出荷準備",
-  "出荷済"
+  "準備","レザー加工","曲げ加工","外注加工/組立",
+  "組立中","組立済","検査中","検査済",
+  "出荷(組立済)","出荷準備","出荷済"
 ];
 function openOpDialog(po, defaults = {}){
   $("#opPO").textContent = po;
@@ -220,8 +224,17 @@ function openOpDialog(po, defaults = {}){
     if(Number.isNaN(ok) || ok < 0) return alert("OK 数は 0 以上の数値で入力してください");
     if(Number.isNaN(ng) || ng < 0) return alert("NG 数は 0 以上の数値で入力してください");
 
+    const payload = {
+      po_id:   po,
+      process: proc,
+      ok_count: ok,
+      ng_count: ng,
+      note: $("#opNote").value,
+      status: procToStatus(proc)  // ← penting agar backend tahu 状況
+    };
+
     try{
-      await jsonp("saveOp", { data: JSON.stringify({ po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value }), user: JSON.stringify(CURRENT_USER||{}) });
+      await jsonp("saveOp", { data: JSON.stringify(payload), user: JSON.stringify(CURRENT_USER||{}) });
       $("#dlgOp").close();
       if($("#dlgScan").open){
         if(scanRAF) cancelAnimationFrame(scanRAF);
@@ -236,9 +249,7 @@ $("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
 
 /* ---------- Masters ---------- */
 let MASTERS = { customers:[], drawings:[], item_names:[], part_nos:[], destinations:[], carriers:[], po_ids:[] };
-async function loadMasters(){
-  try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){ /* silent */ }
-}
+async function loadMasters(){ try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){ } }
 
 /* ---------- 受注 ---------- */
 const SALES_FIELDS = [
@@ -265,10 +276,7 @@ const SALES_VIEW = [
   {label:'備考',     keys:['備考','note']}
 ];
 
-async function loadSales(){
-  const dat = await cached("listSales");
-  renderSalesSlim(dat);
-}
+async function loadSales(){ const dat = await cached("listSales"); renderSalesSlim(dat); }
 function renderSalesSlim(dat){
   const th = $("#thSales"), tb = $("#tbSales"), search = $("#salesSearch");
   const header = dat.header || [];
@@ -621,9 +629,12 @@ const FIN_VIEW = [
   {label:'更新者',   keys:['updated_by']},
 ];
 async function loadFinished(){
-  const dat = await cached("listFinished", {}, 5000);
-  const th = $("#thFinished"), tb = $("#tbFinished"), search = $("#finSearch");
-
+  // gunakan sheetExport agar kompatibel tanpa action khusus
+  const dat = await cached("sheetExport", { sheet: "FinishedGoods" }, 5000);
+  renderFinished(dat);
+}
+function renderFinished(dat){
+  const th = $("#thFin"), tb = $("#tbFin"), search = $("#finSearch");
   const head = dat.header||[];
   const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
   const pick = (row, keys)=>{ for(const k of keys){ const i=idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
@@ -633,7 +644,7 @@ async function loadFinished(){
   const render = ()=>{
     const q = (search?.value||'').toLowerCase();
     tb.innerHTML = '';
-    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+    const rows = (dat.rows||[]).filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
     let i=0; const chunk=150;
     function paint(){
       const end=Math.min(i+chunk, rows.length);
@@ -643,7 +654,8 @@ async function loadFinished(){
         const tds = FIN_VIEW.map(col=>{
           let v = pick(r, col.keys);
           if(col.label==='完了日' && v){
-            const d=(v instanceof Date)?v:new Date(v); if(!isNaN(d)) v = d.toLocaleString('ja-JP');
+            const d=(v instanceof Date)?v:new Date(v);
+            if(!isNaN(d)) v = d.toLocaleString('ja-JP');
           }
           return `<td>${v??''}</td>`;
         }).join('');
@@ -657,8 +669,8 @@ async function loadFinished(){
   if(search) search.oninput = debounce(render, 250);
   render();
 }
-$("#btnFinExport")?.addEventListener('click', ()=> exportTableCSV("#tbFinished","finished_goods.csv"));
-$("#btnFinPrint")?.addEventListener('click', ()=> window.print());
+$("#btnFinExport")?.addEventListener('click', ()=> exportTableCSV("#tbFin","finished_goods.csv"));
+$("#btnFinPrint") ?.addEventListener('click', ()=> window.print());
 
 /* ---------- Form dialog generator (supports datalist + extraHidden) ---------- */
 // openForm(title, fields, api, after, initial={}, opts={extraHidden:{}})
@@ -668,7 +680,6 @@ function openForm(title, fields, api, after, initial={}, opts={}){
   $("#dlgTitle").textContent = title;
   const f = $("#formBody"); f.innerHTML = "";
 
-  // hidden extras (e.g., ship_id for edit)
   const extras = opts?.extraHidden || {};
   Object.entries(extras).forEach(([k,v])=>{
     const hid = document.createElement("input"); hid.type="hidden"; hid.name=k; hid.value=v??''; f.appendChild(hid);
