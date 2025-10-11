@@ -77,3 +77,14 @@ dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
   table.table{font-size:12px}
   .table th,.table td{padding:.35rem .4rem;white-space:normal}
 }
+/* Weather pill */
+#weatherWrap{
+  padding:.25rem .6rem;
+  border-radius:999px;
+  background:rgba(255,255,255,.18);
+  color:#fff;
+  backdrop-filter: saturate(120%) blur(2px);
+}
+#weatherWrap i{ opacity:.95 }
+#weatherWrap span{ color:#fff }
+
