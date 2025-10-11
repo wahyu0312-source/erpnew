@@ -209,18 +209,24 @@
     <div class="body">
       <h3>手入力 <span class="muted s">(PO: <span id="opPO"></span>)</span></h3>
       <div class="grid grid-form">
-        <div class="form-item">
-          <div class="muted s">工程</div>
-          <select id="opProcess"></select>
-        </div>
-        <div class="form-item">
-          <div class="muted s">OK 数</div>
-          <input id="opOK" type="number" min="0" placeholder="0">
-        </div>
-        <div class="form-item">
-          <div class="muted s">NG 数</div>
-          <input id="opNG" type="number" min="0" placeholder="0">
-        </div>
+        <!-- 工程 -->
+<div class="form-item">
+  <label for="opProcess">工程 <span class="req">*</span></label>
+  <select id="opProcess" required></select>
+</div>
+
+<!-- OK -->
+<div class="form-item">
+  <label for="opOK">OK 数 <span class="req">*</span></label>
+  <input id="opOK" type="number" min="0" placeholder="必須: 0 以上" required>
+</div>
+
+<!-- NG -->
+<div class="form-item">
+  <label for="opNG">NG 数 <span class="req">*</span></label>
+  <input id="opNG" type="number" min="0" placeholder="必須: 0 以上" required>
+</div>
+
         <div class="form-item" style="grid-column:1/-1">
           <div class="muted s">備考</div>
           <input id="opNote" placeholder="備考 (任意)">
