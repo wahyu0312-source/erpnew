@@ -11,19 +11,16 @@ body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,'Hiragino 
 .nav .logo{width:28px;height:28px;border-radius:6px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.2))}
 .nav .nav-left{display:flex;align-items:center;gap:.5rem}
 .nav .nav-right{margin-left:auto;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
-.wx-pill{display:inline-flex;align-items:center;gap:.6rem;padding:.4rem .7rem;border-radius:999px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35)}
-.container{max-width:min(92vw,1600px);margin:1.1rem auto;padding:0 1rem}
+
+.container{max-width:min(95vw,1600px);margin:1.1rem auto;padding:0 1rem}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:1rem}
 .card-tight{max-width:520px;margin:4rem auto}
 .row-between{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap}
 .row{display:flex;align-items:center;gap:.5rem}
 .row-end{display:flex;justify-content:flex-end;gap:.5rem}
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:.6rem}
-.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8rem}
-.grid-chips{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
-@media (max-width:960px){ .grid-3{grid-template-columns:1fr} }
-.tile{border:1px solid var(--border);border-radius:12px;padding:.8rem;background:linear-gradient(180deg,#fff,#f8fafc)}
-.stat-num{font-size:2.2rem;font-weight:900}
+.grid-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media (max-width:960px){ .grid-form{grid-template-columns:1fr} }
 .input, input, select, textarea{width:100%;padding:.55rem .65rem;border-radius:10px;border:1px solid var(--border);background:#fff;color:#0f172a;outline:0;transition:border .15s, box-shadow .15s}
 .input:focus, input:focus, select:focus, textarea:focus{border-color:var(--brand);box-shadow:0 0 0 .18rem var(--ring)}
 .btn{display:inline-flex;align-items:center;gap:.45rem;padding:.5rem .8rem;border-radius:999px;border:1px solid var(--brand);background:var(--brand);color:#fff;cursor:pointer}
@@ -32,7 +29,6 @@ body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,'Hiragino 
 .btn.ghost:hover{background:#f1f5f9}
 .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
 .full{width:100%}.grow{flex:1}.hidden{display:none!important}.muted{color:var(--muted)}.s{font-size:.9rem}
-.center{text-align:center}
 .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
 table.table{width:100%;border-collapse:separate;border-spacing:0}
 .table th,.table td{padding:.6rem .7rem;border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;white-space:nowrap}
@@ -48,26 +44,16 @@ table.table{width:100%;border-collapse:separate;border-spacing:0}
 .p-press{color:#9a3412;background:#fff7ed;border-color:#fed7aa}
 .p-assembly{color:#1e3a8a;background:#eff6ff;border-color:#bfdbfe}
 .p-inspection{color:#7c3aed;background:#f5f3ff;border-color:#ddd6fe}
-dialog.paper{border:none;border-radius:16px;box-shadow:var(--shadow);padding:0}
+dialog.paper{border:none;border-radius:16px;box-shadow:var(--shadow);padding:0;max-width:820px}
 dialog.paper::backdrop{background:rgba(15,23,42,.45)}
 dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
-.corner-brand{position:fixed;right:14px;bottom:12px;z-index:40;color:#0f172a;opacity:.65;font-weight:700;text-decoration:none;background:#fff;border:1px solid var(--border);padding:.35rem .6rem;border-radius:999px;box-shadow:var(--shadow)}
-.corner-brand:hover{opacity:1}
 
-/* PRINT A4 */
+/* Print A4 */
 @media print {
   @page{size:A4 portrait;margin:12mm}
-  .nav,.corner-brand,.btn,.dropdown-inline,#weather{display:none!important}
+  .nav,.btn,.dropdown-inline,input[type="file"]{display:none!important}
   .container{max-width:100%;padding:0}
-  .card{box-shadow:none;border:none;padding:0}
+  .card{box-shadow:none;border:1px solid #ddd;padding:.6rem}
   table.table{font-size:12px}
-  .table th,.table td{padding:.3rem .35rem}
-  thead th{background:#fff!important;color:#000!important;border-bottom:1px solid #000}
+  .table th,.table td{padding:.35rem .4rem;white-space:normal}
 }
-#authView .card { max-width: 520px; padding: 1.25rem 1.25rem 1.1rem; }
-#authView h2 { font-size: 1.35rem; margin-top: .2rem; margin-bottom: .9rem; }
-#authView .grid { display: grid; grid-template-columns: 1fr !important; gap: .9rem; }
-#authView input, #authView select { min-height: 52px; font-size: 16.5px; border-radius: 12px; }
-#authView input::placeholder { color: #64748b; opacity: .9; }
-#btnLogin.btn.primary { height: 52px; font-weight: 800; letter-spacing: .02em; background: #0ea5a4; border-color: #0ea5a4; }
-#btnLogin.btn.primary:hover { background:#0d9488; }
