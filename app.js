@@ -581,6 +581,55 @@ async function loadShipsMini(){
   const tEl = $("#shipToday"), pEl = $("#shipPlan");
   if(tEl && pEl){ renderSide(todayList, tEl); renderSide(futureList, pEl); }
 }
+/* ---------- 完成品一覧 (FinishedGoods) ---------- */
+const FIN_VIEW = [
+  {label:'注番',     keys:['po_id','注番']},
+  {label:'得意先',   keys:['得意先','customer']},
+  {label:'品名',     keys:['品名','item_name']},
+  {label:'品番',     keys:['品番','part_no']},
+  {label:'図番',     keys:['図番','drawing_no']},
+  {label:'製造番号', keys:['製造番号','製番号']},
+  {label:'数量',     keys:['qty','数量']},
+  {label:'完成日',   keys:['completed_at','完成日']},
+  {label:'備考',     keys:['note','備考']}
+];
+
+async function loadFinished(){
+  const dat = await cached("listFinished");
+  renderFinishedSlim(dat, "#thFin", "#tbFin", "#finSearch");
+  // tombol Export/Print jika ada
+  $("#btnFinExport")?.addEventListener('click', ()=> exportTableCSV("#tbFin","finished_goods.csv"));
+  $("#btnFinPrint")?.addEventListener('click', ()=> window.print());
+}
+
+function renderFinishedSlim(dat, thSel, tbSel, searchSel){
+  const th = $(thSel), tb = $(tbSel), search = $(searchSel);
+  const header = dat.header || [];
+  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
+  const pick = (row, keys)=>{ for(const k of keys){ const i=idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
+
+  th.innerHTML = `<tr>${FIN_VIEW.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
+
+  const render = ()=>{
+    const q = (search?.value||'').toLowerCase();
+    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+    tb.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    rows.forEach(r=>{
+      const tds = FIN_VIEW.map(col=>{
+        let v = pick(r, col.keys);
+        if(v && /完成日|completed_at/.test(col.keys.join(','))){
+          const d=(v instanceof Date)?v:new Date(v); if(!isNaN(d)) v = d.toLocaleString('ja-JP');
+        }
+        return `<td>${v??''}</td>`;
+      }).join('');
+      const tr=document.createElement('tr'); tr.innerHTML = tds; frag.appendChild(tr);
+    });
+    tb.appendChild(frag);
+  };
+  if(search) search.oninput = debounce(render, 250);
+  render();
+}
 
 /* ---------- Form dialog generator (supports datalist + extraHidden) ---------- */
 // openForm(title, fields, api, after, initial={}, opts={extraHidden:{}})
