@@ -86,7 +86,6 @@ function setUser(u){
   const pages = ["authView","pageDash","pageSales","pagePlan","pageShip"];
   pages.forEach(p => $("#"+p)?.classList.add("hidden"));
 
-  // Sembunyikan semua menu saat belum login
   ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToInvPage','btnToFinPage','btnToInvoice','ddSetting','weatherWrap']
     .forEach(id=> $("#"+id)?.classList.add("hidden"));
 
@@ -99,8 +98,6 @@ function setUser(u){
     if(allow.pages.includes('pagePlan')) $("#btnToPlan").classList.remove("hidden");
     if(allow.pages.includes('pageShip')) $("#btnToShip").classList.remove("hidden");
     $("#ddSetting").classList.remove("hidden");
-
-    // Tampilkan cuaca + load masters
     $("#weatherWrap").classList.remove("hidden");
     ensureWeather();
     loadMasters();
@@ -140,14 +137,12 @@ async function loadOrders(){
   renderOrders();
   loadShipsMini();
 }
-
-/* Virtual render (windowed) untuk tabel besar */
 function renderOrders(){
   const q = ($("#searchQ").value||"").trim().toLowerCase();
   const rows = ORDERS.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
   const tb = $("#tbOrders"); tb.innerHTML = "";
 
-  const chunk = 120; // rows per paint
+  const chunk = 120;
   let i = 0;
   function paint(){
     const end = Math.min(i+chunk, rows.length);
@@ -194,7 +189,6 @@ function openOpDialog(po, defaults = {}){
   const sel = $("#opProcess");
   sel.innerHTML = PROCESS_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join('');
 
-  // Prefill bila ada (dari QR)
   $("#opProcess").value = defaults.process || PROCESS_OPTIONS[0];
   $("#opOK").value      = (defaults.ok_count ?? defaults.ok ?? "") === 0 ? 0 : (defaults.ok_count ?? defaults.ok ?? "");
   $("#opNG").value      = (defaults.ng_count ?? defaults.ng ?? "") === 0 ? 0 : (defaults.ng_count ?? defaults.ng ?? "");
@@ -207,7 +201,6 @@ function openOpDialog(po, defaults = {}){
     const ngStr = $("#opNG").value;
     const proc  = $("#opProcess").value;
 
-    // Validasi wajib
     if(!proc) return alert("工程を選択してください");
     if(okStr === "") return alert("OK 数を入力してください（0 以上）");
     if(ngStr === "") return alert("NG 数を入力してください（0 以上）");
@@ -218,20 +211,16 @@ function openOpDialog(po, defaults = {}){
 
     try{
       await jsonp("saveOp", {
-        data: JSON.stringify({
-          po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value
-        }),
+        data: JSON.stringify({ po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value }),
         user: JSON.stringify(CURRENT_USER||{})
       });
       $("#dlgOp").close();
 
-      // Jika dialog scan masih terbuka, tutup & hentikan kamera
       if($("#dlgScan").open){
         if(scanRAF) cancelAnimationFrame(scanRAF);
         if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
         $("#dlgScan").close();
       }
-
       await refreshAll();
     }catch(e){ alert("保存失敗: " + e.message); }
   };
@@ -239,12 +228,10 @@ function openOpDialog(po, defaults = {}){
 $("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
 
 /* ---------- 受注 ---------- */
-let MASTERS = { customers:[], drawings:[], item_names:[], part_nos:[] };
+let MASTERS = { customers:[], drawings:[], item_names:[], part_nos:[], po_ids:[] };
 
 async function loadMasters(){
-  try{
-    MASTERS = await cached("listMasters", {}, 60000);
-  }catch(_){ /* silent */ }
+  try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){}
 }
 
 const SALES_FIELDS = [
@@ -258,7 +245,8 @@ const SALES_FIELDS = [
   {name:'qty',   label:'数量'},
   {name:'納期',  label:'納期', type:'date'}
 ];
-// Kolom view 受注 (label -> kandidat header pada sheet)
+
+// Kolom view 受注
 const SALES_VIEW = [
   {label:'受注日',   keys:['受注日']},
   {label:'得意先',   keys:['得意先','customer']},
@@ -273,23 +261,14 @@ const SALES_VIEW = [
 
 async function loadSales(){
   const dat = await cached("listSales");
-  renderSalesSlim(dat);   // <== gunakan renderer custom, bukan renderTable()
+  renderSalesSlim(dat);
 }
 function renderSalesSlim(dat){
   const th = $("#thSales"), tb = $("#tbSales"), search = $("#salesSearch");
   const header = dat.header || [];
   const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
-
-  // helper ambil nilai sesuai kandidat keys
-  const pick = (row, keys)=> {
-    for(const k of keys){ const i = idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; }
-    return '';
-  };
-
-  // kolom kunci po_id
+  const pick = (row, keys)=> { for(const k of keys){ const i = idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
   const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
-
-  // header tampilan
   th.innerHTML = `<tr>${SALES_VIEW.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr>`;
 
   const render = ()=>{
@@ -306,7 +285,7 @@ function renderSalesSlim(dat){
         const po = String(r[idx[keyPO]]||'');
         const tds = SALES_VIEW.map(col=>{
           let v = pick(r, col.keys);
-          if(v && (col.label==='受注日' || col.label==='希望納期')){ // tanggal → ja-JP
+          if(v && (col.label==='受注日' || col.label==='希望納期')){
             const d = (v instanceof Date) ? v : new Date(v);
             if(!isNaN(d)) v = d.toLocaleDateString('ja-JP');
           }
@@ -341,16 +320,13 @@ function rowToObject(dat, po_id){
   const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
   const row = (dat.rows||[]).find(r => String(r[idx[keyPO]])===String(po_id));
   if(!row) return null;
-  const obj = {};
-  header.forEach((h,i)=> obj[String(h).trim()] = row[i]);
+  const obj = {}; header.forEach((h,i)=> obj[String(h).trim()] = row[i]);
   obj.po_id = obj.po_id || obj['注番'] || po_id;
   return obj;
 }
-
 function editSales(po_id, dat){
   const obj = rowToObject(dat, po_id);
   if(!obj) return alert('データが見つかりません');
-
   const initial = {
     po_id: obj.po_id,
     '得意先': obj['得意先'] || obj.customer || '',
@@ -365,54 +341,241 @@ function editSales(po_id, dat){
   };
   openForm("受注 編集", SALES_FIELDS, "saveSales", async ()=>{ await loadSales(); }, initial);
 }
-
 async function deleteSales(po_id){
   if(!confirm(`注番 ${po_id} を削除しますか？`)) return;
-  try{
-    await jsonp('deleteSales', { po_id });
-    await loadSales();
-  }catch(e){
-    alert('削除失敗: ' + (e?.message || e));
-  }
+  try{ await jsonp('deleteSales', { po_id }); await loadSales(); }
+  catch(e){ alert('削除失敗: ' + (e?.message || e)); }
 }
-
 $("#btnSalesCreate").onclick = ()=> openForm("受注作成", SALES_FIELDS, "saveSales");
 $("#btnSalesExport").onclick = ()=> exportTableCSV("#tbSales","sales.csv");
 $("#btnSalesImport").onclick = ()=> importCSVtoSheet("bulkImportSales");
 $("#btnSalesPrint").onclick  = ()=> window.print();
-
-/* Template CSV (受注) */
 function downloadSalesTemplate(){
   const headers = ['po_id','得意先','図番','品名','品番','受注日','製造番号','qty','納期'];
   const csv = headers.map(h=>`"${h}"`).join(',') + '\n';
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'sales_template.csv';
-  a.click();
+  a.href = URL.createObjectURL(blob); a.download = 'sales_template.csv'; a.click();
 }
 const btnTpl = $("#btnSalesTpl"); if(btnTpl) btnTpl.onclick = downloadSalesTemplate;
 
 /* ---------- 生産計画 ---------- */
-const PLAN_FIELDS = [
-  {name:'po_id', label:'注番', req:true},
-  {name:'得意先', label:'得意先'},
-  {name:'図番', label:'図番'},
-  {name:'品名', label:'品名'},
-  {name:'品番', label:'品番'},
-  {name:'current_process', label:'工程(開始)', type:'select', options: PROCESS_OPTIONS},
-  {name:'status', label:'状態', type:'select', options:["進行","組立中","組立済","検査中","検査済","出荷準備","出荷済"]},
-  {name:'start_date', label:'開始日', type:'date'},
-  {name:'due_date', label:'完了予定', type:'date'},
-  {name:'note', label:'備考'}
+// kolom view (10 kolom)
+const PLAN_VIEW = [
+  {label:'注番',     keys:['po_id','注番']},
+  {label:'得意先',   keys:['得意先','customer']},
+  {label:'品名',     keys:['品名','item_name']},
+  {label:'品番',     keys:['品番','part_no']},
+  {label:'図番',     keys:['図番','drawing_no']},
+  {label:'製番号',   keys:['製造番号','製番号']},
+  {label:'数量',     keys:['数量','qty']},
+  {label:'開始日',   keys:['開始日','start_date']},
+  {label:'完了予定', keys:['完了予定','due_date']},
+  {label:'備考',     keys:['備考','note']},
 ];
+// form fields (注番 datalist)
+const PLAN_FIELDS = [
+  {name:'po_id', label:'注番', req:true, type:'datalist', options:()=>MASTERS.po_ids || []},
+  {name:'得意先', label:'得意先', type:'select',  options:()=>MASTERS.customers},
+  {name:'図番',   label:'図番',   type:'select',  options:()=>MASTERS.drawings},
+  {name:'品名',   label:'品名',   type:'select',  options:()=>MASTERS.item_names},
+  {name:'品番',   label:'品番',   type:'select',  options:()=>MASTERS.part_nos},
+  {name:'製造番号', label:'製造番号'},
+  {name:'qty',    label:'数量'},
+  {name:'start_date', label:'開始日', type:'date'},
+  {name:'due_date',   label:'完了予定', type:'date'},
+  {name:'note',   label:'備考'}
+];
+
 async function loadPlans(){
   const dat = await cached("listPlans");
-  renderTable(dat, "#thPlan", "#tbPlan", "#planSearch");
+  renderPlansSlim(dat);
 }
+function renderPlansSlim(dat){
+  const th = $("#thPlan"), tb = $("#tbPlan"), search = $("#planSearch");
+  const header = dat.header || [];
+  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
+  const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
+  const pick = (row, keys)=> { for(const k of keys){ const i = idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
+
+  th.innerHTML = `<tr>${PLAN_VIEW.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr>`;
+
+  const render = ()=>{
+    const q = (search.value||'').toLowerCase();
+    tb.innerHTML = '';
+    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+    let i=0; const chunk=150;
+    function paint(){
+      const end=Math.min(i+chunk, rows.length);
+      const frag=document.createDocumentFragment();
+      for(;i<end;i++){
+        const r = rows[i];
+        const po = String(r[idx[keyPO]]||'');
+        const tds = PLAN_VIEW.map(col=>{
+          let v = pick(r, col.keys);
+          if(v && (col.label==='開始日' || col.label==='完了予定')){
+            const d = (v instanceof Date) ? v : new Date(v);
+            if(!isNaN(d)) v = d.toLocaleDateString('ja-JP');
+          }
+          return `<td>${v ?? ''}</td>`;
+        }).join('');
+        const tr=document.createElement('tr');
+        tr.innerHTML = `${tds}
+          <td class="center">
+            <div class="row">
+              <button class="btn ghost btn-print" data-po="${po}"><i class="fa-regular fa-file-lines"></i> 印刷</button>
+              <button class="btn ghost btn-edit"  data-po="${po}"><i class="fa-regular fa-pen-to-square"></i> 編集</button>
+              <button class="btn ghost btn-del"   data-po="${po}"><i class="fa-regular fa-trash-can"></i> 削除</button>
+            </div>
+          </td>`;
+        frag.appendChild(tr);
+      }
+      tb.appendChild(frag);
+      if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
+      if(i>=rows.length){
+        $$(".btn-edit",  tb).forEach(b=> b.onclick = (e)=> editPlan(e.currentTarget.dataset.po, dat));
+        $$(".btn-del",   tb).forEach(b=> b.onclick = (e)=> deletePlan(e.currentTarget.dataset.po));
+        $$(".btn-print", tb).forEach(b=> b.onclick = (e)=> printPlan(e.currentTarget.dataset.po, dat));
+      }
+    }
+    paint();
+  };
+  search.oninput = debounce(render, 250);
+  render();
+}
+
+function rowObj(dat, po_id){
+  const header = dat.header || [];
+  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
+  const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
+  const row = (dat.rows||[]).find(r => String(r[idx[keyPO]])===String(po_id));
+  if(!row) return null;
+  const o = {}; header.forEach((h,i)=> o[String(h).trim()] = row[i]);
+  o.po_id = o.po_id || o['注番'] || po_id;
+  return o;
+}
+function editPlan(po_id, dat){
+  const o = rowObj(dat, po_id);
+  if(!o) return alert('データが見つかりません');
+  const init = {
+    po_id: o.po_id,
+    '得意先': o['得意先']||o.customer||'',
+    '図番':   o['図番']||o.drawing_no||'',
+    '品名':   o['品名']||o.item_name||'',
+    '品番':   o['品番']||o.part_no||'',
+    '製造番号': o['製造番号']||o['製番号']||'',
+    'qty':    o['数量']||o.qty||'',
+    'start_date': o['開始日']||o.start_date||'',
+    'due_date':   o['完了予定']||o.due_date||'',
+    'note':   o['備考']||o.note||'',
+  };
+  openForm("生産計画 編集", PLAN_FIELDS, "savePlan", async ()=>{ await loadPlans(); await loadOrders(); }, init);
+}
+async function deletePlan(po_id){
+  if(!confirm(`注番 ${po_id} を削除しますか？`)) return;
+  try{ await jsonp('deletePlan', { po_id }); await loadPlans(); await loadOrders(); }
+  catch(e){ alert('削除失敗: ' + (e?.message || e)); }
+}
+// 印刷 1件
+function printPlan(po_id, dat){
+  const o = rowObj(dat, po_id);
+  if(!o) return alert('データが見つかりません');
+  const get = (kList)=> { for(const k of kList){ if(o[k]!=null && o[k]!=='') return o[k]; } return ''; };
+  const payload = {
+    po:   o.po_id || o['注番'],
+    cust: get(['得意先','customer']),
+    name: get(['品名','item_name']),
+    part: get(['品番','part_no']),
+    draw: get(['図番','drawing_no']),
+    sn:   get(['製造番号','製番号']),
+    qty:  get(['数量','qty']),
+    start: get(['開始日','start_date']),
+    due:   get(['完了予定','due_date']),
+    note:  get(['備考','note']),
+    proc:  get(['current_process','工程'])
+  };
+  const style = `
+    <style>
+      @page{size:A4;margin:12mm}
+      body{font-family:system-ui,Segoe UI,Roboto,Arial,'Meiryo',sans-serif;color:#0f172a}
+      .wrap{max-width:820px;margin:0 auto}
+      h2{margin:0 0 8px}
+      .grid{display:grid;grid-template-columns:160px 1fr;gap:8px 14px}
+      .card{border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-top:10px}
+      .muted{color:#64748b}.chip{display:inline-block;border:1px solid #cbd5e1;border-radius:999px;padding:2px 10px;font-weight:600}
+    </style>`;
+  const html = `
+    <html><head><meta charset="utf-8">${style}</head>
+    <body onload="window.print()">
+      <div class="wrap">
+        <h2>生産計画票</h2>
+        <div class="card">
+          <div class="grid">
+            <div class="muted">注番</div><div><b>${payload.po||''}</b></div>
+            <div class="muted">得意先</div><div>${payload.cust||''}</div>
+            <div class="muted">品名</div><div>${payload.name||''}</div>
+            <div class="muted">品番</div><div>${payload.part||''}</div>
+            <div class="muted">図番</div><div>${payload.draw||''}</div>
+            <div class="muted">製番号</div><div>${payload.sn||''}</div>
+            <div class="muted">数量</div><div>${payload.qty||''}</div>
+            <div class="muted">開始日</div><div>${payload.start? new Date(payload.start).toLocaleDateString('ja-JP'):''}</div>
+            <div class="muted">完了予定</div><div>${payload.due? new Date(payload.due).toLocaleDateString('ja-JP'):''}</div>
+            <div class="muted">工程(現状)</div><div><span class="chip">${payload.proc||'—'}</span></div>
+            <div class="muted">備考</div><div>${(payload.note||'').toString().replace(/\n/g,'<br>')}</div>
+          </div>
+        </div>
+      </div>
+    </body></html>`;
+  const w = window.open('', '_blank'); w.document.write(html); w.document.close();
+}
+
+// Import 生産計画 sesuai form (save per row)
+$("#btnPlanImport").onclick = ()=> importPlansBySave();
+function importPlansBySave(){
+  const input = document.createElement('input'); input.type='file'; input.accept='.csv,.xlsx';
+  input.onchange = async ()=>{
+    const file = input.files[0]; if(!file) return;
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf); const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, {defval:'', raw:false}); // header-aware
+    for(const r of rows){
+      const data = {
+        po_id: r['注番'] || r['po_id'] || '',
+        '得意先': r['得意先']||'',
+        '図番':   r['図番']||'',
+        '品名':   r['品名']||'',
+        '品番':   r['品番']||'',
+        '製造番号': r['製造番号']||r['製番号']||'',
+        qty:        r['数量']||r['qty']||'',
+        start_date: r['開始日']||'',
+        due_date:   r['完了予定']||'',
+        note:       r['備考']||r['note']||'',
+      };
+      await jsonp("savePlan", { data: JSON.stringify(data), user: JSON.stringify(CURRENT_USER||{}) });
+    }
+    await loadPlans(); await loadOrders();
+    alert('Import 完了');
+  };
+  input.click();
+}
+// ひな形 生産計画
+(function ensurePlanTemplateButton(){
+  const header = document.querySelector('#pagePlan header .row.gap');
+  if(header && !document.getElementById('btnPlanTpl')){
+    const btn = document.createElement('button');
+    btn.id = 'btnPlanTpl'; btn.className = 'btn ghost';
+    btn.innerHTML = `<i class="fa-regular fa-file"></i> ひな形`;
+    btn.onclick = ()=>{
+      const headers = ['注番','得意先','図番','品名','品番','製造番号','数量','開始日','完了予定','備考'];
+      const csv = headers.map(h=>`"${h}"`).join(',') + '\n';
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'plan_template.csv'; a.click();
+    };
+    header.insertBefore(btn, document.getElementById('btnPlanExport'));
+  }
+})();
 $("#btnPlanCreate").onclick = ()=> openForm("生産計画 作成", PLAN_FIELDS, "savePlan", ()=> { loadPlans(); loadOrders(); });
 $("#btnPlanExport").onclick = ()=> exportTableCSV("#tbPlan","plans.csv");
-$("#btnPlanImport").onclick = ()=> importCSVtoSheet("bulkImportPlans", ()=> { loadPlans(); loadOrders(); });
 $("#btnPlanPrint").onclick  = ()=> window.print();
 
 /* ---------- 出荷予定 ---------- */
@@ -443,58 +606,56 @@ async function loadShipsMini(){
   const head = dat.header || [];
   const idx = Object.fromEntries(head.map((h,i)=>[h,i]));
   const today = new Date(); const ymd = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const isToday = (s)=>{
-    const t = new Date(s);
-    return t.getFullYear()===ymd.getFullYear() && t.getMonth()===ymd.getMonth() && t.getDate()===ymd.getDate();
-  };
+  const isToday = (s)=>{ const t = new Date(s); return t.getFullYear()===ymd.getFullYear() && t.getMonth()===ymd.getMonth() && t.getDate()===ymd.getDate(); };
   const statusCol = idx.status ?? idx['状態'];
   const dateCol   = idx.scheduled_date ?? idx['出荷日'] ?? idx['納期'];
   const poCol     = idx.po_id ?? idx['注番'];
 
-  const todayList = [];
-  const futureList = [];
+  const todayList = [], futureList = [];
   rows.forEach(r=>{
-    const st = String(r[statusCol]||'');
-    const dt = r[dateCol];
+    const st = String(r[statusCol]||''); const dt = r[dateCol];
     if(!dt || /出荷済/.test(st)) return;
     const entry = { po: r[poCol], date: dt, status: st, dest: r[idx.destination]||'' , qty: r[idx.qty]||'' };
-    if(isToday(dt)) todayList.push(entry);
-    else if(new Date(dt) > ymd) futureList.push(entry);
+    if(isToday(dt)) todayList.push(entry); else if(new Date(dt) > ymd) futureList.push(entry);
   });
-  const renderSide = (arr, el)=>{
-    el.innerHTML = arr.slice(0,50).map(e=>`
-      <div class="ship-item">
-        <div><b>${e.po||''}</b> <span class="muted s">${e.dest||''}</span></div>
-        <div class="row-between s"><span>${new Date(e.date).toLocaleDateString('ja-JP')}</span><span>${e.qty||''}</span></div>
-      </div>
-    `).join('') || `<div class="muted s">なし</div>`;
-  };
+  const renderSide = (arr, el)=>{ el.innerHTML = arr.slice(0,50).map(e=>`
+      <div class="ship-item"><div><b>${e.po||''}</b> <span class="muted s">${e.dest||''}</span></div>
+      <div class="row-between s"><span>${new Date(e.date).toLocaleDateString('ja-JP')}</span><span>${e.qty||''}</span></div></div>
+  `).join('') || `<div class="muted s">なし</div>`; };
   const tEl = $("#shipToday"), pEl = $("#shipPlan");
   if(tEl && pEl){ renderSide(todayList, tEl); renderSide(futureList, pEl); }
 }
 
-// openForm(title, fields, api, after, initial?)
+/* ---------- Form dialog generator (support datalist) ---------- */
 let CURRENT_API = null;
 function openForm(title, fields, api, after, initial={}){
   CURRENT_API = api;
   $("#dlgTitle").textContent = title;
   const f = $("#formBody"); f.innerHTML = "";
-  fields.forEach(x=>{
+  fields.forEach((x,idx)=>{
     const wrap = document.createElement("div");
     wrap.className = "form-item";
     const label = `<div class="muted s">${x.label}${x.req? ' <span style="color:#c00">*</span>':''}</div>`;
     let input = '';
     let opts = (typeof x.options === 'function') ? x.options() : (x.options||[]);
     const val = (initial[x.name] ?? '');
+
     if(x.type==='select'){
       input = `<select name="${x.name}">${opts.map(o=>`<option value="${o}" ${String(o)===String(val)?'selected':''}>${o}</option>`).join('')}</select>`;
     }else if(x.type==='date'){
-      const v = val ? new Date(val) : '';
-      const iso = (v && !isNaN(v)) ? new Date(v.getTime()-v.getTimezoneOffset()*60000).toISOString().slice(0,10) : '';
+      const d = val ? new Date(val) : '';
+      const iso = (d && !isNaN(d)) ? new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10) : '';
       input = `<input name="${x.name}" type="date" value="${iso}">`;
+    }else if(x.type==='datalist'){
+      const listId = `dl_${x.name}_${idx}`;
+      input = `<input name="${x.name}" list="${listId}" value="${val??''}" placeholder="${x.label}">
+               <datalist id="${listId}">
+                 ${opts.map(o=>`<option value="${o}">`).join('')}
+               </datalist>`;
     }else{
       input = `<input name="${x.name}" placeholder="${x.label}" value="${val??''}">`;
     }
+
     wrap.innerHTML = label + input;
     f.appendChild(wrap);
   });
@@ -515,10 +676,9 @@ function openForm(title, fields, api, after, initial={}){
     }catch(e){ alert("保存失敗: " + e.message); }
   };
 }
-
 $("#btnDlgCancel").onclick = ()=> $("#dlgForm").close();
 
-/* ---------- Render helper for listSheet_ ---------- */
+/* ---------- Render helper (generic) ---------- */
 function renderTable(dat, thSel, tbSel, searchSel){
   const th = $(thSel), tb = $(tbSel), search = $(searchSel);
   th.innerHTML = `<tr>${dat.header.map(h=>`<th>${h}</th>`).join('')}</tr>`;
@@ -594,20 +754,13 @@ function openScanDialog(po){
           if(scanRAF) cancelAnimationFrame(scanRAF);
           if(scanStream) { scanStream.getTracks().forEach(t=> t.stop()); }
 
-          // Format QR: PO|PROCESS|OK|NG|NOTE
           const parts = String(code.data||'').split('|');
           let defaults = {};
           if(parts.length >= 4){
-            defaults = {
-              process: parts[1] || "",
-              ok_count: Number(parts[2]||""),
-              ng_count: Number(parts[3]||""),
-              note: parts[4] || ""
-            };
+            defaults = { process: parts[1] || "", ok_count: Number(parts[2]||""), ng_count: Number(parts[3]||""), note: parts[4] || "" };
           }else{
             defaults = { process:"", ok_count:"", ng_count:"", note:"" };
           }
-
           openOpDialog(po, defaults);
           return;
         }
@@ -629,10 +782,8 @@ async function ensureWeather(){
     const cacheKey = 'wx_cache_v1';
     const cached = JSON.parse(localStorage.getItem(cacheKey)||'null');
     const now = Date.now();
-    if(cached && (now - cached.t) < 30*60*1000){
-      renderWeather(cached.v); return;
-    }
-    let lat=35.6762, lon=139.6503; // Tokyo default
+    if(cached && (now - cached.t) < 30*60*1000){ renderWeather(cached.v); return; }
+    let lat=35.6762, lon=139.6503;
     if(navigator.geolocation){
       await new Promise(res=> navigator.geolocation.getCurrentPosition(
         pos=>{ lat=pos.coords.latitude; lon=pos.coords.longitude; res(); },
@@ -644,7 +795,7 @@ async function ensureWeather(){
     const v = await fetch(url).then(r=>r.json());
     localStorage.setItem(cacheKey, JSON.stringify({v,t:now}));
     renderWeather(v);
-  }catch(_){ /* silent */ }
+  }catch(_){}
 }
 function renderWeather(v){
   if(!v?.current) return;
