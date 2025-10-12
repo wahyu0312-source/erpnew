@@ -830,7 +830,7 @@ function renderTable(dat, thSel, tbSel, searchSel){
 /* ---------- CSV Export / Import ---------- */
 function exportTableCSV(tbodySel, filename){
   const rows = $$(tbodySel+" tr").map(tr=> [...tr.children].map(td=> td.textContent));
-  const csv = rows.map(r => r.map(v=>{ const s = (v??'').toString().replace(/"/g,'""'); return `"${s}"`; }).join(',')).join('\n');
+  const csv = rows.map(r => r.map(v=>{ const s = (v??'').toString().replace(/"/g,'"\"'); return `"${s}"`; }).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename; a.click();
 }
