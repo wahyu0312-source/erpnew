@@ -64,12 +64,6 @@ const statusToBadge = (s)=>{
   if(/出荷済/.test(s)) return `<span class="badge st-shipped"><i class="fa-solid fa-truck"></i>${s}</span>`;
   return `<span class="badge"><i class="fa-regular fa-clock"></i>${s||"—"}</span>`;
 };
-// NEW: badge OK/NG kecil di bawah 工程
-function countsBadge(ok, ng){
-  const o = (ok!=null && ok!=="") ? `<span class="chip p-other">OK:${ok}</span>` : '';
-  const n = (ng!=null && ng!=="") ? `<span class="chip p-other">NG:${ng}</span>` : '';
-  return (o || n) ? `<div class="row gap s" style="justify-content:center;margin-top:4px">${o}${n}</div>` : '';
-}
 
 /* ---------- Auth & Role ---------- */
 let CURRENT_USER = null;
@@ -159,53 +153,22 @@ function renderOrders(){
     for(; i<end; i++){
       const r = rows[i];
       const tr = document.createElement("tr");
-     tr.innerHTML = `
-  <td>
-    <div class="s muted">注番</div>
-    <div><b>${r.po_id||""}</b></div>
-    <div class="muted s">${r["得意先"]||"—"}</div>
-  </td>
-  <td>${r["品名"]||"—"}</td>
-  <td class="center">${r["品番"]||"—"}</td>
-  <td class="center">${r["図番"]||"—"}</td>
-
-  <!-- 状態 -->
-  <td class="center">
-    <div class="cell-stack">
-      ${statusToBadge(r.status)}
-      <div class="xs muted"></div>
-    </div>
-  </td>
-
-  <!-- 工程 + OK/NG kecil -->
-  <td class="center">
-    <div class="cell-stack">
-      ${procToChip(r.current_process)}
-      <div class="counts">
-        <span class="count ok">OK:${r.ok_count ?? 0}</span>
-        <span class="count ng">NG:${r.ng_count ?? 0}</span>
-      </div>
-    </div>
-  </td>
-
-  <td class="center">${fmt(r.updated_at)}</td>
-  <td class="center">${r.updated_by||"—"}</td>
-
-  <!-- 操作  -->
-  <td class="center">
-    <div class="actions">
-      <button class="btn icon ghost btn-stqr" title="工程QR">
-        <i class="fa-solid fa-qrcode"></i><span>工程QR</span>
-      </button>
-      <button class="btn icon ghost btn-scan" data-po="${r.po_id}" title="スキャン">
-        <i class="fa-solid fa-camera"></i><span>スキャン</span>
-      </button>
-      <button class="btn icon ghost btn-op" data-po="${r.po_id}" title="手入力">
-        <i class="fa-solid fa-keyboard"></i><span>手入力</span>
-      </button>
-    </div>
-  </td>`;
-
+      tr.innerHTML = `
+        <td><div class="s muted">注番</div><div><b>${r.po_id||""}</b></div><div class="muted s">${r["得意先"]||"—"}</div></td>
+        <td>${r["品名"]||"—"}</td>
+        <td class="center">${r["品番"]||"—"}</td>
+        <td class="center">${r["図番"]||"—"}</td>
+        <td class="center">${statusToBadge(r.status)}</td>
+        <td class="center">${procToChip(r.current_process)}</td>
+        <td class="center">${fmt(r.updated_at)}</td>
+        <td class="center">${r.updated_by||"—"}</td>
+        <td class="center">
+          <div class="row">
+            <button class="btn ghost btn-stqr"><i class="fa-solid fa-qrcode"></i> 工程QR</button>
+            <button class="btn ghost btn-scan" data-po="${r.po_id}"><i class="fa-solid fa-camera"></i> スキャン</button>
+            <button class="btn ghost btn-op"   data-po="${r.po_id}"><i class="fa-solid fa-keyboard"></i> 手入力</button>
+          </div>
+        </td>`;
       frag.appendChild(tr);
     }
     tb.appendChild(frag);
@@ -884,9 +847,9 @@ function importCSVtoSheet(api, after){
 }
 
 /* =================================================
-   QR 工程 (Station) — UNIVERSAL
+   QR 工程 (Station) — UNIVERSAL (local canvas, tajam)
    - QR static untuk semua station, payload: STN|<工程名>
-   - Dapat diakses dari tombol: #btnStationQR atau tombol “工程QR” di baris
+   - Dapat diakses dari tombol: menu 設定 > 工程QR atau tombol “工程QR” di baris
    - Saat scan di dialog produk, app membaca QR station → prompt OK/NG → saveOp
 ================================================= */
 const STATION_PROCESSES = [
@@ -894,49 +857,54 @@ const STATION_PROCESSES = [
   "検査工程","検査中","検査済","出荷準備","出荷（組立済）","出荷済"
 ];
 const QR_ACCEPT_PATTERNS = [
-  /^STN\|(.+)$/i,      // STN|工程
-  /^PROC[:|](.+)$/i,   // PROC:工程  / PROC|工程
-  /^工程[:|](.+)$/     // 工程:工程  / 工程|工程
+  /^STN\|(.+)$/i,
+  /^PROC[:|](.+)$/i,
+  /^工程[:|](.+)$/
 ];
-function qrUrl(payload, size=220){
-  return `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encodeURIComponent(payload)}`;
-}
-function openStationQrSheet(){
-  const tiles = STATION_PROCESSES.map(p=>{
-    const payload = `STN|${p}`;
-    return `
-      <div class="tile">
-        <img src="${qrUrl(payload)}" alt="QR ${p}">
-        <div class="lbl"><b>${p}</b></div>
-        <div class="s muted">${payload}</div>
-      </div>`;
-  }).join("");
 
+function openStationQrSheet(){
+  const tiles = STATION_PROCESSES.map(()=>`<div class="tile"><div class="qr"></div><div class="lbl name"></div><div class="payload s muted"></div></div>`).join("");
   const html = `
-  <html><head><meta charset="utf-8"><title>工程QR（Station）</title>
+  <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>工程QR（Station, universal）</title>
   <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px;}
-    h1{font-size:18px;margin:0 0 12px;}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
-    .tile{border:1px solid #e5e7eb;border-radius:12px;padding:10px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
-    .tile img{width:100%;height:auto;display:block;}
-    .lbl{margin-top:6px}
-    .muted{color:#6b7280}
-    .s{font-size:12px}
-    .toolbar{position:sticky;top:0;background:#fff;padding:8px 0;margin-bottom:8px}
-    @media print {.toolbar{display:none}}
-  </style></head>
+    :root{--border:#e5e7eb;--muted:#6b7280}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px;background:#fafafa}
+    h1{font-size:18px;margin:0}
+    .toolbar{position:sticky;top:0;background:#fafafa;padding:10px 0 14px;margin-bottom:12px}
+    .btn{padding:.45rem .75rem;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
+    .tile{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);break-inside:avoid}
+    .qr{display:flex;align-items:center;justify-content:center;min-height:232px}
+    .name{font-weight:700;margin-top:8px}
+    .muted{color:var(--muted)} .s{font-size:12px}
+    @media print{body{margin:12mm}.toolbar{display:none}.grid{gap:12px}}
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  </head>
   <body>
     <div class="toolbar">
       <h1>工程QR（Station, universal）</h1>
-      <button onclick="window.print()">印刷</button>
+      <button class="btn" onclick="window.print()">印刷</button>
     </div>
-    <div class="grid">${tiles}</div>
+    <div class="grid" id="grid">${tiles}</div>
+    <script>
+      const PROCS = ${JSON.stringify(STATION_PROCESSES)};
+      const tiles = [...document.querySelectorAll('.tile')];
+      tiles.forEach((tile, i)=>{
+        const p = PROCS[i];
+        tile.querySelector('.name').textContent = p;
+        tile.querySelector('.payload').textContent = 'STN|' + p;
+        new QRCode(tile.querySelector('.qr'), { text:'STN|' + p, width:232, height:232, correctLevel: QRCode.CorrectLevel.M });
+      });
+    </script>
   </body></html>`;
   const w = window.open('about:blank'); w.document.write(html); w.document.close();
 }
-// tombol di menu “設定 > 工程QR” (kalau ada di HTML)
+// dukung dua id menu (tergantung index.html)
 $("#btnStationQR")?.addEventListener("click", openStationQrSheet);
+$("#miStationQR")?.addEventListener("click", openStationQrSheet);
 
 /* ---------- QR Scan (detect station QR → OK/NG prompt) ---------- */
 let scanStream=null, scanRAF=null;
