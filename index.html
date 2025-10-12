@@ -39,19 +39,25 @@
       <button id="btnToPlan"    class="btn ghost hidden"><i class="fa-solid fa-list-check"></i> 生産計画</button>
       <button id="btnToShip"    class="btn ghost hidden"><i class="fa-solid fa-truck"></i> 出荷予定</button>
       <button id="btnToInvPage" class="btn ghost hidden"><i class="fa-solid fa-boxes-stacked"></i> 在庫</button>
-      <button id="btnToFinPage" class="btn hidden">
-  <i class="fa-regular fa-box-archive"></i> 完成品一覧
-</button>
+      <button id="btnToFinPage" class="btn hidden"><i class="fa-regular fa-box-archive"></i> 完成品一覧</button>
       <button id="btnToInvoice" class="btn ghost hidden"><i class="fa-regular fa-file-lines"></i> 請求書</button>
 
+      <!-- Settings dropdown -->
       <details class="dropdown-inline hidden" id="ddSetting">
         <summary class="btn ghost">
           <i class="fa-solid fa-gear"></i> 設定 <i class="fa-solid fa-caret-down caret" style="margin-left:.25rem"></i>
         </summary>
         <div class="menu right">
-          <button id="miStationQR" class="menu-item"><i class="fa-solid fa-qrcode"></i> 工程QR</button>
+          <!-- FIX: id harus btnStationQR agar match dengan app.js -->
+          <button id="btnStationQR" class="menu-item"
+                  onclick="this.closest('details')?.removeAttribute('open')">
+            <i class="fa-solid fa-qrcode"></i> 工程QR
+          </button>
           <hr style="border:none;border-top:1px solid var(--border);margin:.35rem 0">
-          <button id="btnLogout" class="menu-item"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
+          <button id="btnLogout" class="menu-item"
+                  onclick="this.closest('details')?.removeAttribute('open')">
+            <i class="fa-solid fa-right-from-bracket"></i> ログアウト
+          </button>
         </div>
       </details>
 
@@ -126,7 +132,6 @@
           <button id="btnSalesExport" class="btn ghost"><i class="fa-solid fa-file-export"></i> Export</button>
           <button id="btnSalesPrint"  class="btn ghost"><i class="fa-solid fa-print"></i> Print</button>
           <button id="btnSalesTpl" class="btn ghost"><i class="fa-regular fa-file"></i> ひな形CSV</button>
-
         </div>
       </header>
       <div class="table-wrap" style="max-height:60vh">
@@ -181,47 +186,46 @@
       </div>
     </section>
   </main>
-<!-- ===== 完成品一覧 ===== -->
-<section id="pageFinished" class="hidden">
-  <div class="card">
-    <div class="card-head row-between">
-      <div class="row gap">
-        <i class="fa-regular fa-box-archive"></i>
-        <b>完成品一覧</b>
+
+  <!-- 完成品一覧 -->
+  <section id="pageFinished" class="hidden">
+    <div class="card">
+      <div class="card-head row-between">
+        <div class="row gap"><i class="fa-regular fa-box-archive"></i><b>完成品一覧</b></div>
+        <div class="row gap">
+          <input id="finSearch" class="input" placeholder="検索..." />
+          <button id="btnFinExport" class="btn"><i class="fa-regular fa-file-csv"></i> Export</button>
+          <button id="btnFinPrint" class="btn"><i class="fa-regular fa-print"></i> Print</button>
+        </div>
       </div>
-      <div class="row gap">
-        <input id="finSearch" class="input" placeholder="検索..." />
-        <button id="btnFinExport" class="btn"><i class="fa-regular fa-file-csv"></i> Export</button>
-        <button id="btnFinPrint" class="btn"><i class="fa-regular fa-print"></i> Print</button>
+      <div class="table-wrap">
+        <table class="table">
+          <thead id="thFin"></thead>
+          <tbody id="tbFin"></tbody>
+        </table>
       </div>
-    </div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead id="thFin"></thead>
-        <tbody id="tbFin"></tbody>
-      </table>
-    </div>
-  </div>
-</section>
-  <!-- 在庫 -->
-<main id="pageInv" class="container hidden">
-  <section class="card">
-    <header class="row-between">
-      <h3><i class="fa-solid fa-boxes-stacked"></i> 在庫</h3>
-      <div class="row gap">
-        <input id="invSearch" placeholder="検索..." class="input">
-        <button id="btnInvExport" class="btn ghost"><i class="fa-solid fa-file-export"></i> Export</button>
-        <button id="btnInvPrint"  class="btn ghost"><i class="fa-solid fa-print"></i> Print</button>
-      </div>
-    </header>
-    <div class="table-wrap" style="max-height:60vh">
-      <table class="table s">
-        <thead id="thInv"></thead>
-        <tbody id="tbInv"></tbody>
-      </table>
     </div>
   </section>
-</main>
+
+  <!-- 在庫 -->
+  <main id="pageInv" class="container hidden">
+    <section class="card">
+      <header class="row-between">
+        <h3><i class="fa-solid fa-boxes-stacked"></i> 在庫</h3>
+        <div class="row gap">
+          <input id="invSearch" placeholder="検索..." class="input">
+          <button id="btnInvExport" class="btn ghost"><i class="fa-solid fa-file-export"></i> Export</button>
+          <button id="btnInvPrint"  class="btn ghost"><i class="fa-solid fa-print"></i> Print</button>
+        </div>
+      </header>
+      <div class="table-wrap" style="max-height:60vh">
+        <table class="table s">
+          <thead id="thInv"></thead>
+          <tbody id="tbInv"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
 
   <!-- Dialog: Create / Edit -->
   <dialog id="dlgForm" class="paper">
@@ -254,24 +258,18 @@
     <div class="body">
       <h3>手入力 <span class="muted s">(PO: <span id="opPO"></span>)</span></h3>
       <div class="grid grid-form">
-        <!-- 工程 -->
-<div class="form-item">
-  <label for="opProcess">工程 <span class="req">*</span></label>
-  <select id="opProcess" required></select>
-</div>
-
-<!-- OK -->
-<div class="form-item">
-  <label for="opOK">OK 数 <span class="req">*</span></label>
-  <input id="opOK" type="number" min="0" placeholder="必須: 0 以上" required>
-</div>
-
-<!-- NG -->
-<div class="form-item">
-  <label for="opNG">NG 数 <span class="req">*</span></label>
-  <input id="opNG" type="number" min="0" placeholder="必須: 0 以上" required>
-</div>
-
+        <div class="form-item">
+          <label for="opProcess">工程 <span class="req">*</span></label>
+          <select id="opProcess" required></select>
+        </div>
+        <div class="form-item">
+          <label for="opOK">OK 数 <span class="req">*</span></label>
+          <input id="opOK" type="number" min="0" placeholder="必須: 0 以上" required>
+        </div>
+        <div class="form-item">
+          <label for="opNG">NG 数 <span class="req">*</span></label>
+          <input id="opNG" type="number" min="0" placeholder="必須: 0 以上" required>
+        </div>
         <div class="form-item" style="grid-column:1/-1">
           <div class="muted s">備考</div>
           <input id="opNote" placeholder="備考 (任意)">
@@ -283,5 +281,14 @@
       <button class="btn primary" id="btnOpSave">保存</button>
     </footer>
   </dialog>
+
+  <!-- Tutup dropdown saat klik di luar (untuk <details>) -->
+  <script>
+    document.addEventListener('click', (e)=>{
+      const dd = document.getElementById('ddSetting');
+      if(!dd) return;
+      if(!dd.contains(e.target)) dd.removeAttribute('open');
+    });
+  </script>
 </body>
 </html>
