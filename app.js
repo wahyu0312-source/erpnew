@@ -662,15 +662,87 @@ $("#btnFinExport")?.addEventListener('click', ()=> exportTableCSV("#tbFin","fini
 $("#btnFinPrint")?.addEventListener('click', ()=> window.print());
 
 /* ---------- 在庫 ---------- */
-async function loadInventory(){
-  // Backend akan menghitung dari StatusLog(検査済) - Ship(出荷済)
-  const dat = await cached("listInventory", {}, 5000)
-    .catch(()=>({header:['得意先','品番','品名','図番','数量','備考'], rows:[]}));
+const INV_UI = { cust:'', item:'' };
 
-  renderTable(dat, "#thInv", "#tbInv", "#invSearch");
+async function loadInventory(){
+  const dat = await cached("listInventory", {}, 5000)
+    .catch(()=>({header:['得意先','図番','機種','品名','在庫数','最終更新'], rows:[]}));
+
+  ensureInvControls(dat);
+  renderInventory(dat);
 }
+
+function ensureInvControls(dat){
+  if($("#invCtrlBar")) return;
+  const wrap = $("#thInv")?.closest(".card") || $("#pageInv");
+  const bar = document.createElement("div");
+  bar.id = "invCtrlBar";
+  bar.className = "row wrap gap";
+  bar.style.margin = "8px 0 12px";
+
+  // build selects
+  const h = dat.header||[];
+  const idx = Object.fromEntries(h.map((x,i)=>[x,i]));
+  const colCust = idx['得意先'];
+  const colModel= (idx['機種']!=null ? idx['機種'] : idx['品名']);
+  const setOpts = (values)=> [...new Set(values.filter(Boolean))].sort();
+
+  const selCust = document.createElement("select");
+  selCust.innerHTML = `<option value="">(すべての得意先)</option>` +
+    setOpts(dat.rows.map(r=> r[colCust]||'')).map(v=>`<option value="${v}">${v}</option>`).join('');
+
+  const selItem = document.createElement("select");
+  selItem.innerHTML = `<option value="">(すべての機種/品名)</option>` +
+    setOpts(dat.rows.map(r=> r[colModel]||r[idx['品名']]||'')).map(v=>`<option value="${v}">${v}</option>`).join('');
+
+  bar.append(makeLabel("得意先", selCust), makeLabel("機種/品名", selItem));
+  wrap.insertBefore(bar, wrap.querySelector(".table-wrap"));
+
+  selCust.onchange = ()=>{ INV_UI.cust = selCust.value; renderInventory(dat); };
+  selItem.onchange = ()=>{ INV_UI.item = selItem.value; renderInventory(dat); };
+
+  function makeLabel(txt, el){ const w=document.createElement("div"); w.className="row gap s"; w.innerHTML=`<div class="muted s" style="min-width:72px">${txt}</div>`; w.append(el); return w; }
+}
+
+function renderInventory(dat){
+  const th = $("#thInv"), tb = $("#tbInv"), search = $("#invSearch");
+  th.innerHTML = `<tr>${dat.header.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+
+  const h = dat.header||[];
+  const idx = Object.fromEntries(h.map((x,i)=>[x,i]));
+  const colCust = idx['得意先'];
+  const colModel= (idx['機種']!=null ? idx['機種'] : idx['品名']);
+
+  const q = (search?.value||'').toLowerCase();
+  const rows = dat.rows.filter(r=>{
+    if(INV_UI.cust && String(r[colCust]||'') !== INV_UI.cust) return false;
+    if(INV_UI.item){
+      const itemVal = String(r[colModel]||r[idx['品名']]||'');
+      if(itemVal !== INV_UI.item) return false;
+    }
+    return !q || JSON.stringify(r).toLowerCase().includes(q);
+  });
+
+  tb.innerHTML = '';
+  let i=0; const chunk=150;
+  (function paint(){
+    const end=Math.min(i+chunk, rows.length);
+    const frag=document.createDocumentFragment();
+    for(;i<end;i++){
+      const tr=document.createElement('tr');
+      tr.innerHTML = rows[i].map(c=>`<td>${c??''}</td>`).join('');
+      frag.appendChild(tr);
+    }
+    tb.appendChild(frag);
+    if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
+  })();
+
+  if(search && !search._invBind){ search._invBind=true; search.oninput = debounce(()=>renderInventory(dat), 250); }
+}
+
 $("#btnInvExport")?.addEventListener('click', ()=> exportTableCSV("#tbInv","inventory.csv"));
 $("#btnInvPrint")?.addEventListener('click', ()=> window.print());
+
 
 /* ---------- Form dialog generator ---------- */
 let CURRENT_API = null;
