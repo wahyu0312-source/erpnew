@@ -863,7 +863,15 @@ const QR_ACCEPT_PATTERNS = [
 ];
 
 function openStationQrSheet(){
-  const tiles = STATION_PROCESSES.map(()=>`<div class="tile"><div class="qr"></div><div class="lbl name"></div><div class="payload s muted"></div></div>`).join("");
+  const procs = STATION_PROCESSES;
+  const tiles = procs.map(() =>
+    `<div class="tile">
+       <div class="qr"></div>
+       <div class="lbl name"></div>
+       <div class="payload s muted"></div>
+     </div>`
+  ).join("");
+
   const html = `
   <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>工程QR（Station, universal）</title>
@@ -876,12 +884,34 @@ function openStationQrSheet(){
     .btn{padding:.45rem .75rem;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer}
     .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
     .tile{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);break-inside:avoid}
-    .qr{display:flex;align-items:center;justify-content:center;min-height:232px}
+    .qr{display:flex;align-items:center;justify-content:center;width:232px;height:232px}
     .name{font-weight:700;margin-top:8px}
     .muted{color:var(--muted)} .s{font-size:12px}
     @media print{body{margin:12mm}.toolbar{display:none}.grid{gap:12px}}
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    // Data dari parent
+    window.__PROCS__ = ${JSON.stringify(procs)};
+    function initQRCodes(){
+      const tiles = Array.from(document.querySelectorAll('.tile'));
+      tiles.forEach((tile, i) => {
+        const p = window.__PROCS__[i];
+        tile.querySelector('.name').textContent = p;
+        tile.querySelector('.payload').textContent = 'STN|' + p;
+        new QRCode(tile.querySelector('.qr'), {
+          text: 'STN|' + p, width:232, height:232,
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      });
+    }
+    // Jika lib sudah ada (cache) jalankan setelah DOM siap
+    document.addEventListener('DOMContentLoaded', () => {
+      if (window.QRCode) initQRCodes();
+    });
+  </script>
+  <!-- Pastikan initQRCodes dipanggil SETELAH library QR diload -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+          onload="initQRCodes()"></script>
   </head>
   <body>
     <div class="toolbar">
@@ -889,19 +919,13 @@ function openStationQrSheet(){
       <button class="btn" onclick="window.print()">印刷</button>
     </div>
     <div class="grid" id="grid">${tiles}</div>
-    <script>
-      const PROCS = ${JSON.stringify(STATION_PROCESSES)};
-      const tiles = [...document.querySelectorAll('.tile')];
-      tiles.forEach((tile, i)=>{
-        const p = PROCS[i];
-        tile.querySelector('.name').textContent = p;
-        tile.querySelector('.payload').textContent = 'STN|' + p;
-        new QRCode(tile.querySelector('.qr'), { text:'STN|' + p, width:232, height:232, correctLevel: QRCode.CorrectLevel.M });
-      });
-    </script>
   </body></html>`;
-  const w = window.open('about:blank'); w.document.write(html); w.document.close();
+
+  const w = window.open('about:blank');
+  w.document.write(html);
+  w.document.close();
 }
+
 // dukung dua id menu (tergantung index.html)
 $("#btnStationQR")?.addEventListener("click", openStationQrSheet);
 $("#miStationQR")?.addEventListener("click", openStationQrSheet);
