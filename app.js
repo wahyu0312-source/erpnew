@@ -64,6 +64,12 @@ const statusToBadge = (s)=>{
   if(/出荷済/.test(s)) return `<span class="badge st-shipped"><i class="fa-solid fa-truck"></i>${s}</span>`;
   return `<span class="badge"><i class="fa-regular fa-clock"></i>${s||"—"}</span>`;
 };
+// NEW: badge OK/NG kecil di bawah 工程
+function countsBadge(ok, ng){
+  const o = (ok!=null && ok!=="") ? `<span class="chip p-other">OK:${ok}</span>` : '';
+  const n = (ng!=null && ng!=="") ? `<span class="chip p-other">NG:${ng}</span>` : '';
+  return (o || n) ? `<div class="row gap s" style="justify-content:center;margin-top:4px">${o}${n}</div>` : '';
+}
 
 /* ---------- Auth & Role ---------- */
 let CURRENT_USER = null;
@@ -159,7 +165,10 @@ function renderOrders(){
         <td class="center">${r["品番"]||"—"}</td>
         <td class="center">${r["図番"]||"—"}</td>
         <td class="center">${statusToBadge(r.status)}</td>
-        <td class="center">${procToChip(r.current_process)}</td>
+        <td class="center">
+          ${procToChip(r.current_process)}
+          ${countsBadge(r.ok_count, r.ng_count)}
+        </td>
         <td class="center">${fmt(r.updated_at)}</td>
         <td class="center">${r.updated_by||"—"}</td>
         <td class="center">
