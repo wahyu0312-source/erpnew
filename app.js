@@ -1,7 +1,7 @@
 /* =================================================
-   JSONP Frontend (Optimized)
+   JSONP Frontend (Optimized, clean build)
    - Dashboard status merge StatusLog
-   - CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧 / 在庫
+   - CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧
    - 操作: QR scanner + 手入力 (OK/NG/工程)
    - Import / Export / Print
    - Cuaca (Open-Meteo, cached)
@@ -68,18 +68,18 @@ const statusToBadge = (s)=>{
 /* ---------- Auth & Role ---------- */
 let CURRENT_USER = null;
 const ROLE_MAP = {
-  'admin':       { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished','pageInv'], nav:true },
-  '営業':        { pages:['pageSales','pageDash','pageFinished','pageInv'], nav:true },
-  '生産管理':     { pages:['pagePlan','pageShip','pageDash','pageFinished','pageInv'], nav:true },
-  '生産管理部':    { pages:['pagePlan','pageShip','pageDash','pageFinished','pageInv'], nav:true },
-  '製造':        { pages:['pageDash','pageFinished','pageInv'], nav:true },
-  '検査':        { pages:['pageDash','pageFinished','pageInv'], nav:true }
+  'admin':       { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished'], nav:true },
+  '営業':        { pages:['pageSales','pageDash','pageFinished'], nav:true },
+  '生産管理':     { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
+  '生産管理部':    { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
+  '製造':        { pages:['pageDash','pageFinished'], nav:true },
+  '検査':        { pages:['pageDash','pageFinished'], nav:true }
 };
 function setUser(u){
   CURRENT_USER = u || null;
   $("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "";
 
-  const pages = ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageInv"];
+  const pages = ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished"];
   pages.forEach(p => $("#"+p)?.classList.add("hidden"));
 
   ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToFinPage','btnToInvPage','btnToInvoice','ddSetting','weatherWrap']
@@ -89,38 +89,34 @@ function setUser(u){
 
   const allow = ROLE_MAP[u.role] || ROLE_MAP[u.department] || ROLE_MAP['admin'];
   if(allow?.nav){
-    if(allow.pages.includes('pageDash'))     $("#btnToDash").classList.remove("hidden");
-    if(allow.pages.includes('pageSales'))    $("#btnToSales").classList.remove("hidden");
-    if(allow.pages.includes('pagePlan'))     $("#btnToPlan").classList.remove("hidden");
-    if(allow.pages.includes('pageShip'))     $("#btnToShip").classList.remove("hidden");
-    if(allow.pages.includes('pageFinished')) $("#btnToFinPage").classList.remove("hidden");
-    if(allow.pages.includes('pageInv'))      $("#btnToInvPage").classList.remove("hidden");
-
+    if(allow.pages.includes('pageDash'))      $("#btnToDash").classList.remove("hidden");
+    if(allow.pages.includes('pageSales'))     $("#btnToSales").classList.remove("hidden");
+    if(allow.pages.includes('pagePlan'))      $("#btnToPlan").classList.remove("hidden");
+    if(allow.pages.includes('pageShip'))      $("#btnToShip").classList.remove("hidden");
+    if(allow.pages.includes('pageFinished'))  $("#btnToFinPage").classList.remove("hidden");
     $("#ddSetting").classList.remove("hidden");
     $("#weatherWrap").classList.remove("hidden");
     ensureWeather();
     loadMasters();
   }
-
   show("pageDash");
   refreshAll();
 }
 
 /* ---------- Nav ---------- */
 function show(id){
-  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageInv"]
-    .forEach(p=>$("#"+p)?.classList.add("hidden"));
+  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished"]
+    .forEach(p=> $("#"+p)?.classList.add("hidden"));
   $("#"+id)?.classList.remove("hidden");
 }
-$("#btnToDash").onclick=()=>{ show("pageDash"); refreshAll(); };
-$("#btnToSales").onclick=()=>{ show("pageSales"); loadSales(); };
-$("#btnToPlan").onclick =()=>{ show("pagePlan");  loadPlans(); };
-$("#btnToShip").onclick =()=>{ show("pageShip");  loadShips(); };
-$("#btnToFinPage").onclick =()=>{ show("pageFinished"); loadFinished(); };
-$("#btnToInvPage").onclick =()=>{ show("pageInv"); loadInventory(); };
-$("#btnLogout").onclick  =()=> setUser(null);
+$("#btnToDash").onclick   = ()=>{ show("pageDash");    refreshAll(); };
+$("#btnToSales").onclick  = ()=>{ show("pageSales");   loadSales(); };
+$("#btnToPlan").onclick   = ()=>{ show("pagePlan");    loadPlans(); };
+$("#btnToShip").onclick   = ()=>{ show("pageShip");    loadShips(); };
+$("#btnToFinPage").onclick= ()=>{ show("pageFinished");loadFinished(); };
+$("#btnLogout").onclick   = ()=> setUser(null);
 
-/* ---------- Login (enter to submit) ---------- */
+/* ---------- Login ---------- */
 $("#btnLogin").onclick = loginSubmit;
 $("#inUser").addEventListener("keydown", e=>{ if(e.key==='Enter') loginSubmit(); });
 $("#inPass").addEventListener("keydown", e=>{ if(e.key==='Enter') loginSubmit(); });
@@ -135,7 +131,7 @@ async function loginSubmit(){
   }catch(e){ alert("ログイン失敗: " + (e?.message || e)); }
 }
 
-/* ---------- Dashboard Orders + 操作 ---------- */
+/* ---------- Dashboard + 操作 ---------- */
 let ORDERS = [];
 async function loadOrders(){
   ORDERS = await cached("listOrders");
@@ -185,11 +181,9 @@ $("#searchQ").addEventListener("input", debouncedRender);
 async function refreshAll(){ await loadOrders(); }
 $("#btnExportOrders").onclick = ()=> exportTableCSV("#tbOrders","orders.csv");
 
-/* ---------- 操作: 手入力 dialog ---------- */
+/* ---------- 操作: 手入力 ---------- */
 const PROCESS_OPTIONS = [
-  "準備","レザー加工","曲げ加工","外注加工/組立",
-  "組立中","組立済","検査中","検査済",
-  "出荷（組立済）","出荷準備","出荷済"
+  "準備","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","検査中","検査済","出荷（組立済）","出荷準備","出荷済"
 ];
 function openOpDialog(po, defaults = {}){
   $("#opPO").textContent = po;
@@ -231,7 +225,7 @@ $("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
 /* ---------- Masters ---------- */
 let MASTERS = { customers:[], drawings:[], item_names:[], part_nos:[], destinations:[], carriers:[], po_ids:[] };
 async function loadMasters(){
-  try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){ /* silent */ }
+  try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){ }
 }
 
 /* ---------- 受注 ---------- */
@@ -258,7 +252,6 @@ const SALES_VIEW = [
   {label:'希望納期', keys:['希望納期','納期','due']},
   {label:'備考',     keys:['備考','note']}
 ];
-
 async function loadSales(){
   const dat = await cached("listSales");
   renderSalesSlim(dat);
@@ -361,8 +354,8 @@ const PLAN_FIELDS = [
   {name:'品番', label:'品番', type:'select', options:()=>MASTERS.part_nos, free:true},
   {name:'current_process', label:'工程(開始)', type:'select', options: PROCESS_OPTIONS},
   {name:'status', label:'状態', type:'select', options:["進行","組立中","組立済","検査中","検査済","出荷準備","出荷済"]},
-  {name:'start_date', label:'生産開始', type:'date'},
-  {name:'due_date', label:'納期', type:'date'},
+  {name:'start_date', label:'開始日', type:'date'},
+  {name:'due_date', label:'完了予定', type:'date'},
   {name:'note', label:'備考'}
 ];
 async function loadPlans(){
@@ -536,7 +529,7 @@ function editShip(po_id, ship_id, dat){
   const header = dat.header||[]; const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(),i]));
   const row = (dat.rows||[]).find(r =>
     (ship_id && idx['ship_id']!=null && String(r[idx['ship_id']])===String(ship_id)) ||
-    (String(r[idx['po_id']??idx['注番']])===String(po_id))
+    (String(r[idx['po_id']!=null?'po_id':'注番']])===String(po_id))
   );
   if(!row) return alert('データが見つかりません');
 
@@ -555,7 +548,6 @@ function editShip(po_id, ship_id, dat){
     'carrier': row[idx['carrier']]||row[idx['運送会社']]||'',
     'note':    row[idx['note']]||row[idx['備考']]||''
   };
-
   openForm("出荷予定 編集", SHIP_FIELDS, "saveShip", async ()=>{ await loadShips(); }, initial, { extraHidden: { ship_id: initial.ship_id } });
 }
 async function deleteShip(po_id, ship_id){
@@ -654,69 +646,14 @@ async function loadFinished(){
 $("#btnFinExport")?.addEventListener('click', ()=> exportTableCSV("#tbFin","finished_goods.csv"));
 $("#btnFinPrint")?.addEventListener('click', ()=> window.print());
 
-/* ==== 在庫 (Inventory) ==== */
-const INV_VIEW = [
-  {label:'得意先',   keys:['得意先','customer']},
-  {label:'品番',     keys:['品番','part_no']},
-  {label:'品名',     keys:['品名','item_name']},
-  {label:'図番',     keys:['図番','drawing_no']},
-  {label:'数量',     keys:['数量','qty']},
-  {label:'備考',     keys:['備考','note']},
-  {label:'更新日時', keys:['updated_at','更新日時']},
-  {label:'更新者',   keys:['updated_by','更新者']},
-];
-async function loadInventory(){
-  const dat = await cached("listInventory", {}, 5000);
-  renderInventory(dat);
-}
-function renderInventory(dat){
-  const th = $("#thInv"), tb = $("#tbInv"), search = $("#invSearch");
-  const head = dat.header||[];
-  const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
-  const pick = (row, keys)=>{ for(const k of keys){ const i=idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
-
-  th.innerHTML = `<tr>${INV_VIEW.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
-
-  const render = ()=>{
-    const q = (search?.value||'').toLowerCase();
-    tb.innerHTML = '';
-    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-    let i=0; const chunk=150;
-    function paint(){
-      const end=Math.min(i+chunk, rows.length);
-      const frag=document.createDocumentFragment();
-      for(;i<end;i++){
-        const r = rows[i];
-        const tds = INV_VIEW.map(col=>{
-          let v = pick(r, col.keys);
-          if(col.label==='更新日時' && v){
-            const d=(v instanceof Date)?v:new Date(v); if(!isNaN(d)) v = d.toLocaleString('ja-JP');
-          }
-          return `<td>${v??''}</td>`;
-        }).join('');
-        const tr=document.createElement('tr'); tr.innerHTML = tds; frag.appendChild(tr);
-      }
-      tb.appendChild(frag);
-      if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
-    }
-    paint();
-  };
-  if(search) search.oninput = debounce(render, 250);
-  render();
-
-  $("#btnInvExport")?.onclick = ()=> exportTableCSV("#tbInv","inventory.csv");
-  $("#btnInvPrint")?.onclick  = ()=> window.print();
-}
-
-/* ---------- Form dialog generator (supports datalist + extraHidden) ---------- */
-// openForm(title, fields, api, after, initial={}, opts={extraHidden:{}})
+/* ---------- Form dialog generator ---------- */
 let CURRENT_API = null;
+// openForm(title, fields, api, after, initial={}, opts={extraHidden:{}})
 function openForm(title, fields, api, after, initial={}, opts={}){
   CURRENT_API = api;
   $("#dlgTitle").textContent = title;
   const f = $("#formBody"); f.innerHTML = "";
 
-  // hidden extras (e.g., ship_id for edit)
   const extras = opts?.extraHidden || {};
   Object.entries(extras).forEach(([k,v])=>{
     const hid = document.createElement("input"); hid.type="hidden"; hid.name=k; hid.value=v??''; f.appendChild(hid);
@@ -788,7 +725,7 @@ function renderTable(dat, thSel, tbSel, searchSel){
     }
     paint();
   };
-  search.oninput = debounce(render, 250);
+  if(search) search.oninput = debounce(render, 250);
   render();
 }
 
