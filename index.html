@@ -203,6 +203,26 @@
     </div>
   </div>
 </section>
+  <!-- 在庫 -->
+<main id="pageInv" class="container hidden">
+  <section class="card">
+    <header class="row-between">
+      <h3><i class="fa-solid fa-boxes-stacked"></i> 在庫</h3>
+      <div class="row gap">
+        <input id="invSearch" placeholder="検索..." class="input">
+        <button id="btnInvExport" class="btn ghost"><i class="fa-solid fa-file-export"></i> Export</button>
+        <button id="btnInvPrint"  class="btn ghost"><i class="fa-solid fa-print"></i> Print</button>
+      </div>
+    </header>
+    <div class="table-wrap" style="max-height:60vh">
+      <table class="table s">
+        <thead id="thInv"></thead>
+        <tbody id="tbInv"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
   <!-- Dialog: Create / Edit -->
   <dialog id="dlgForm" class="paper">
     <div class="body">
