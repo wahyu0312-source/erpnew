@@ -89,5 +89,46 @@ dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
 #weatherWrap span{ color:#fff }
 .table .row .btn { padding:.35rem .6rem; font-size:.85rem }
 .table tbody tr:hover .btn { filter:brightness(0.98) }
+/* ===== Dashboard table polish ===== */
+.table-wrap table { table-layout: fixed; }
+#tbOrders td { vertical-align: middle; }
+
+/* Stack untuk Status / 工程 */
+.cell-stack {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 6px; line-height: 1.15;
+}
+
+/* Badge status: sedikit lebih padat */
+.badge { display:inline-flex; align-items:center; gap:6px;
+  padding:6px 10px; border-radius:999px; font-weight:600; font-size:13px; }
+
+/* Chip proses: padat */
+.chip { display:inline-flex; align-items:center; gap:6px;
+  padding:6px 10px; border-radius:999px; font-weight:600; font-size:13px; }
+
+/* OK/NG kecil & kompak */
+.counts { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+.count {
+  display:inline-flex; align-items:center; border:1px solid #e5e7eb;
+  border-radius:999px; padding:2px 8px; font-size:12px; font-weight:700;
+}
+.count.ok { background:#f6fffb; border-color:#b7f0d3; }
+.count.ng { background:#fff7f7; border-color:#f3c1c1; }
+
+/* Kolom 操作: ikon-ghost kecil, rapi, bisa wrap */
+.actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+.btn.icon {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb;
+  background:#fff; cursor:pointer;
+}
+.btn.icon.ghost:hover { background:#f8fafc; }
+.btn.icon i { font-size:14px; }
+
+/* Responsif: kecilkan label tombol di layar sempit */
+@media (max-width: 980px){
+  .btn.icon span{ display:none; }  /* ikon-only */
+}
 
 
