@@ -43,6 +43,14 @@ async function cached(action, params={}, ttlMs=15000){
   apiCache.set(key, {v, t: now});
   return v;
 }
+// bust specific caches after write
+function bustCache(actions){
+  actions.forEach(a=>{
+    for(const k of apiCache.keys()){
+      if(k.startsWith(a + ':')) apiCache.delete(k);
+    }
+  });
+}
 
 /* ---------- Badges ---------- */
 const procToChip = (p)=>{
@@ -187,6 +195,13 @@ $("#btnExportOrders").onclick = ()=> exportTableCSV("#tbOrders","orders.csv");
 const PROCESS_OPTIONS = [
   "準備","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","検査中","検査済","出荷（組立済）","出荷準備","出荷済"
 ];
+
+// derive 'status' from selected process if it contains a status keyword
+function procToStatus(proc){
+  const m = String(proc||'').match(/(進行|組立中|組立済|検査中|検査済|出荷準備|出荷済)/);
+  return m ? m[1] : '';
+}
+
 function openOpDialog(po, defaults = {}){
   $("#opPO").textContent = po;
   const sel = $("#opProcess");
@@ -211,7 +226,22 @@ function openOpDialog(po, defaults = {}){
     if(Number.isNaN(ng) || ng < 0) return alert("NG 数は 0 以上の数値で入力してください");
 
     try{
-      await jsonp("saveOp", { data: JSON.stringify({ po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value }), user: JSON.stringify(CURRENT_USER||{}) });
+      const status = procToStatus(proc);
+      await jsonp("saveOp", {
+        data: JSON.stringify({
+          po_id: po,
+          process: proc,
+          ok_count: ok,
+          ng_count: ng,
+          note: $("#opNote").value,
+          status // penting: update 状態 di backend
+        }),
+        user: JSON.stringify(CURRENT_USER||{})
+      });
+
+      // clear caches so views refresh with new inventory/finished/orders
+      bustCache(['listOrders','listFinished','listInventory']);
+
       $("#dlgOp").close();
       if($("#dlgScan").open){
         if(scanRAF) cancelAnimationFrame(scanRAF);
@@ -219,6 +249,8 @@ function openOpDialog(po, defaults = {}){
         $("#dlgScan").close();
       }
       await refreshAll();
+      if(!$("#pageInv")?.classList.contains("hidden"))     await loadInventory();
+      if(!$("#pageFinished")?.classList.contains("hidden"))await loadFinished();
     }catch(e){ alert("保存失敗: " + e.message); }
   };
 }
@@ -830,7 +862,10 @@ function renderTable(dat, thSel, tbSel, searchSel){
 /* ---------- CSV Export / Import ---------- */
 function exportTableCSV(tbodySel, filename){
   const rows = $$(tbodySel+" tr").map(tr=> [...tr.children].map(td=> td.textContent));
-  const csv = rows.map(r => r.map(v=>{ const s = (v??'').toString().replace(/"/g,'"\"'); return `"${s}"`; }).join(',')).join('\n');
+  const csv = rows.map(r => r.map(v=>{
+    const s = (v??'').toString().replace(/"/g,'""'); // correct CSV escape
+    return `"${s}"`;
+  }).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename; a.click();
 }
