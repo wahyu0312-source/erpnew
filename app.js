@@ -17,6 +17,38 @@ const fmt = (d)=> d? new Date(d).toLocaleString("ja-JP"):"";
 const normalizeProc = (s)=> String(s||"").trim()
   .replace("レーサ加工","レザー加工").replace("外作加工","外注加工/組立") || "未設定";
 
+/* ---------- tiny styles injection (for table layout & buttons) ---------- */
+function injectStyles(){
+  if($('#__injected_dash_styles')) return;
+  const css = `
+  .table .center{ text-align:center }
+  .row{ display:flex; gap:.5rem; align-items:center }
+  .row-between{ display:flex; justify-content:space-between; align-items:center; gap:.5rem }
+  .actions{ display:flex; justify-content:center; gap:.5rem; flex-wrap:wrap }
+  .btn.icon{ display:inline-flex; align-items:center; gap:.4rem }
+  .chip{ display:inline-flex; align-items:center; gap:.35rem; padding:.2rem .55rem; border-radius:999px; background:#eef2ff; font-size:.85em; white-space:nowrap }
+  .badge{ display:inline-flex; align-items:center; gap:.35rem; padding:.2rem .55rem; border-radius:8px; background:#f1f5f9; font-size:.85em; white-space:nowrap }
+  .p-laser{ background:#fef3c7 }
+  .p-bend{ background:#e0f2fe }
+  .p-press{ background:#e2e8f0 }
+  .p-assembly{ background:#e9d5ff }
+  .p-inspection{ background:#dcfce7 }
+  .p-other{ background:#f1f5f9 }
+  .cell-stack{ display:flex; flex-direction:column; align-items:center; gap:.25rem }
+  .counts{ display:flex; gap:.4rem; }
+  .counts .count{ font-size:.78em; padding:.15rem .45rem; border-radius:999px; background:#f8fafc }
+  .counts .ok{ background:#e2fbe2 }
+  .counts .ng{ background:#ffe4e6 }
+  /* ship mini list */
+  .ship-item{ padding:.35rem .5rem; border-bottom:1px dashed #eee }
+  `;
+  const el = document.createElement('style');
+  el.id='__injected_dash_styles';
+  el.textContent = css;
+  document.head.appendChild(el);
+}
+injectStyles();
+
 /* ---------- JSONP helper ---------- */
 function jsonp(action, params={}){
   return new Promise((resolve,reject)=>{
@@ -56,12 +88,12 @@ const procToChip = (p)=>{
 };
 const statusToBadge = (s)=>{
   s = String(s||"");
-  if(/組立中/.test(s)) return `<span class="badge"><i class="fa-solid fa-screwdriver-wrench"></i>${s}</span>`;
-  if(/組立済/.test(s)) return `<span class="badge"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
-  if(/検査中/.test(s)) return `<span class="badge st-inspected"><i class="fa-regular fa-clipboard"></i>${s}</span>`;
-  if(/検査済/.test(s)) return `<span class="badge st-inspected"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
+  if(/組立中/.test(s))   return `<span class="badge"><i class="fa-solid fa-screwdriver-wrench"></i>${s}</span>`;
+  if(/組立済/.test(s))   return `<span class="badge"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
+  if(/検査中/.test(s))   return `<span class="badge st-inspected"><i class="fa-regular fa-clipboard"></i>${s}</span>`;
+  if(/検査済/.test(s))   return `<span class="badge st-inspected"><i class="fa-regular fa-circle-check"></i>${s}</span>`;
   if(/出荷準備/.test(s)) return `<span class="badge st-ready"><i class="fa-solid fa-box-open"></i>${s}</span>`;
-  if(/出荷済/.test(s)) return `<span class="badge st-shipped"><i class="fa-solid fa-truck"></i>${s}</span>`;
+  if(/出荷済/.test(s))   return `<span class="badge st-shipped"><i class="fa-solid fa-truck"></i>${s}</span>`;
   return `<span class="badge"><i class="fa-regular fa-clock"></i>${s||"—"}</span>`;
 };
 
@@ -153,20 +185,46 @@ function renderOrders(){
     for(; i<end; i++){
       const r = rows[i];
       const tr = document.createElement("tr");
+      const ok = (r.ok_count ?? 0);
+      const ng = (r.ng_count ?? 0);
+
       tr.innerHTML = `
-        <td><div class="s muted">注番</div><div><b>${r.po_id||""}</b></div><div class="muted s">${r["得意先"]||"—"}</div></td>
+        <td>
+          <div class="s muted">注番</div>
+          <div><b>${r.po_id||""}</b></div>
+          <div class="muted s">${r["得意先"]||"—"}</div>
+        </td>
         <td>${r["品名"]||"—"}</td>
         <td class="center">${r["品番"]||"—"}</td>
         <td class="center">${r["図番"]||"—"}</td>
-        <td class="center">${statusToBadge(r.status)}</td>
-        <td class="center">${procToChip(r.current_process)}</td>
+
+        <!-- 状態 -->
+        <td class="center">
+          <div class="cell-stack">
+            ${statusToBadge(r.status)}
+          </div>
+        </td>
+
+        <!-- 工程 + OK/NG kecil -->
+        <td class="center">
+          <div class="cell-stack">
+            ${procToChip(r.current_process)}
+            <div class="counts">
+              <span class="count ok">OK:${ok}</span>
+              <span class="count ng">NG:${ng}</span>
+            </div>
+          </div>
+        </td>
+
         <td class="center">${fmt(r.updated_at)}</td>
         <td class="center">${r.updated_by||"—"}</td>
+
+        <!-- 操作  -->
         <td class="center">
-          <div class="row">
-            <button class="btn ghost btn-stqr"><i class="fa-solid fa-qrcode"></i> 工程QR</button>
-            <button class="btn ghost btn-scan" data-po="${r.po_id}"><i class="fa-solid fa-camera"></i> スキャン</button>
-            <button class="btn ghost btn-op"   data-po="${r.po_id}"><i class="fa-solid fa-keyboard"></i> 手入力</button>
+          <div class="actions">
+            <button class="btn icon ghost btn-stqr" title="工程QR"><i class="fa-solid fa-qrcode"></i><span>工程QR</span></button>
+            <button class="btn icon ghost btn-scan" data-po="${r.po_id}" title="スキャン"><i class="fa-solid fa-camera"></i><span>スキャン</span></button>
+            <button class="btn icon ghost btn-op" data-po="${r.po_id}" title="手入力"><i class="fa-solid fa-keyboard"></i><span>手入力</span></button>
           </div>
         </td>`;
       frag.appendChild(tr);
@@ -431,6 +489,7 @@ function ensureShipControls(dat){
   const btnPrintCustDate = document.createElement("button");
   btnPrintCustDate.className = "btn ghost"; btnPrintCustDate.textContent = "得意先＋日付で印刷";
 
+  function makeLabel(txt, el){ const w=document.createElement("div"); w.className="row gap s"; w.innerHTML=`<div class="muted s" style="min-width:60px">${txt}</div>`; w.append(el); return w; }
   bar.append(makeLabel("得意先", selCust), makeLabel("日付", inDate), ckWrap, btnPrintCust, btnPrintCustDate);
   tableWrap.parentNode.insertBefore(bar, tableWrap);
 
@@ -439,8 +498,6 @@ function ensureShipControls(dat){
   $("#shipGroupChk").onchange = (e)=>{ SHIP_UI.groupByDate = e.target.checked; renderShipSlim(dat); };
   btnPrintCust.onclick = async ()=>{ if(!SHIP_UI.selectedCustomer){ alert("得意先を選択してください"); return; } await printShipByCustomer(SHIP_UI.selectedCustomer); };
   btnPrintCustDate.onclick = async ()=>{ if(!SHIP_UI.selectedCustomer || !SHIP_UI.selectedDate){ alert("得意先と日付を選択してください"); return; } await printShipByCustomer(SHIP_UI.selectedCustomer, SHIP_UI.selectedDate); };
-
-  function makeLabel(txt, el){ const w=document.createElement("div"); w.className="row gap s"; w.innerHTML=`<div class="muted s" style="min-width:60px">${txt}</div>`; w.append(el); return w; }
 }
 function renderShipSlim(dat){
   const th = $("#thShip"), tb = $("#tbShip"), search = $("#shipSearch");
@@ -695,13 +752,12 @@ function ensureInvControls(dat){
   selItem.innerHTML = `<option value="">(すべての機種/品名)</option>` +
     setOpts(dat.rows.map(r=> r[colModel]||r[idx['品名']]||'')).map(v=>`<option value="${v}">${v}</option>`).join('');
 
+  function makeLabel(txt, el){ const w=document.createElement("div"); w.className="row gap s"; w.innerHTML=`<div class="muted s" style="min-width:72px">${txt}</div>`; w.append(el); return w; }
   bar.append(makeLabel("得意先", selCust), makeLabel("機種/品名", selItem));
   wrap.insertBefore(bar, wrap.querySelector(".table-wrap"));
 
   selCust.onchange = ()=>{ INV_UI.cust = selCust.value; renderInventory(dat); };
   selItem.onchange = ()=>{ INV_UI.item = selItem.value; renderInventory(dat); };
-
-  function makeLabel(txt, el){ const w=document.createElement("div"); w.className="row gap s"; w.innerHTML=`<div class="muted s" style="min-width:72px">${txt}</div>`; w.append(el); return w; }
 }
 function renderInventory(dat){
   const th = $("#thInv"), tb = $("#tbInv"), search = $("#invSearch");
@@ -847,88 +903,69 @@ function importCSVtoSheet(api, after){
 }
 
 /* =================================================
-   QR 工程 (Station) — UNIVERSAL (local canvas, tajam)
+   QR 工程 (Station) — UNIVERSAL
    - QR static untuk semua station, payload: STN|<工程名>
-   - Dapat diakses dari tombol: menu 設定 > 工程QR atau tombol “工程QR” di baris
-   - Saat scan di dialog produk, app membaca QR station → prompt OK/NG → saveOp
+   - Akses dari: 設定>工程QR atau tombol “工程QR” di baris
+   - Scan → prompt OK/NG → saveOp
 ================================================= */
 const STATION_PROCESSES = [
   "レザー加工","曲げ加工","外注加工/組立","組立",
   "検査工程","検査中","検査済","出荷準備","出荷（組立済）","出荷済"
 ];
 const QR_ACCEPT_PATTERNS = [
-  /^STN\|(.+)$/i,
-  /^PROC[:|](.+)$/i,
-  /^工程[:|](.+)$/
+  /^STN\|(.+)$/i,      // STN|工程
+  /^PROC[:|](.+)$/i,   // PROC:工程  / PROC|工程
+  /^工程[:|](.+)$/     // 工程:工程  / 工程|工程
 ];
-
+// gunakan api.qrserver.com agar stabil & tajam
+function qrUrl(payload, size=512){
+  // ukuran besar (512) lalu ditampilkan ~220px => crisp
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(payload)}`;
+}
 function openStationQrSheet(){
-  const procs = STATION_PROCESSES;
-  const tiles = procs.map(() =>
-    `<div class="tile">
-       <div class="qr"></div>
-       <div class="lbl name"></div>
-       <div class="payload s muted"></div>
-     </div>`
-  ).join("");
+  const tiles = STATION_PROCESSES.map(p=>{
+    const payload = `STN|${p}`;
+    return `
+      <div class="tile">
+        <img src="${qrUrl(payload)}" alt="QR ${p}" loading="eager">
+        <div class="lbl"><b>${p}</b></div>
+        <div class="s muted">${payload}</div>
+      </div>`;
+  }).join("");
 
   const html = `
-  <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>工程QR（Station, universal）</title>
+  <html><head><meta charset="utf-8"><title>工程QR（Station, universal）</title>
   <style>
-    :root{--border:#e5e7eb;--muted:#6b7280}
-    *{box-sizing:border-box}
-    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px;background:#fafafa}
-    h1{font-size:18px;margin:0}
-    .toolbar{position:sticky;top:0;background:#fafafa;padding:10px 0 14px;margin-bottom:12px}
-    .btn{padding:.45rem .75rem;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}
-    .tile{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,.05);break-inside:avoid}
-    .qr{display:flex;align-items:center;justify-content:center;width:232px;height:232px}
-    .name{font-weight:700;margin-top:8px}
-    .muted{color:var(--muted)} .s{font-size:12px}
-    @media print{body{margin:12mm}.toolbar{display:none}.grid{gap:12px}}
-  </style>
-  <script>
-    // Data dari parent
-    window.__PROCS__ = ${JSON.stringify(procs)};
-    function initQRCodes(){
-      const tiles = Array.from(document.querySelectorAll('.tile'));
-      tiles.forEach((tile, i) => {
-        const p = window.__PROCS__[i];
-        tile.querySelector('.name').textContent = p;
-        tile.querySelector('.payload').textContent = 'STN|' + p;
-        new QRCode(tile.querySelector('.qr'), {
-          text: 'STN|' + p, width:232, height:232,
-          correctLevel: QRCode.CorrectLevel.M
-        });
-      });
+    :root{ --gap:16px; --tile:236px; --border:#e5e7eb; }
+    *{ box-sizing:border-box }
+    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px;background:#fafafa;color:#111827}
+    h1{font-size:18px;margin:0 0 12px;}
+    .toolbar{position:sticky;top:0;background:#fff;padding:8px 0;margin-bottom:8px;z-index:2}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--tile),1fr));gap:var(--gap)}
+    .tile{border:1px solid var(--border);border-radius:14px;padding:12px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+    .tile img{width:100%;height:auto;display:block;border-radius:8px}
+    .lbl{margin-top:8px}
+    .muted{color:#6b7280}
+    .s{font-size:12px}
+    @media print{
+      body{margin:0}
+      .toolbar{display:none}
+      .grid{gap:10px}
+      .tile{page-break-inside:avoid}
     }
-    // Jika lib sudah ada (cache) jalankan setelah DOM siap
-    document.addEventListener('DOMContentLoaded', () => {
-      if (window.QRCode) initQRCodes();
-    });
-  </script>
-  <!-- Pastikan initQRCodes dipanggil SETELAH library QR diload -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
-          onload="initQRCodes()"></script>
-  </head>
+  </style></head>
   <body>
     <div class="toolbar">
       <h1>工程QR（Station, universal）</h1>
-      <button class="btn" onclick="window.print()">印刷</button>
+      <button onclick="window.print()">印刷</button>
     </div>
-    <div class="grid" id="grid">${tiles}</div>
+    <div class="grid">${tiles}</div>
   </body></html>`;
-
-  const w = window.open('about:blank');
-  w.document.write(html);
-  w.document.close();
+  const w = window.open('about:blank'); w.document.write(html); w.document.close();
 }
-
-// dukung dua id menu (tergantung index.html)
-$("#btnStationQR")?.addEventListener("click", openStationQrSheet);
+// aktifkan di menu 設定 > 工程QR dan juga tombol lama jika ada
 $("#miStationQR")?.addEventListener("click", openStationQrSheet);
+$("#btnStationQR")?.addEventListener("click", openStationQrSheet);
 
 /* ---------- QR Scan (detect station QR → OK/NG prompt) ---------- */
 let scanStream=null, scanRAF=null;
