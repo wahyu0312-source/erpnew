@@ -526,11 +526,17 @@ function renderShipSlim(dat){
   if(search) search.oninput = debounce(()=> renderShipSlim(dat), 250);
 }
 function editShip(po_id, ship_id, dat){
-  const header = dat.header||[]; const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(),i]));
+  const header = dat.header||[];
+  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
+
+  // Tentukan key untuk kolom PO sekali saja
+  const keyPO = (idx['po_id']!=null) ? 'po_id' : (idx['注番']!=null ? '注番' : null);
+
   const row = (dat.rows||[]).find(r =>
-    (ship_id && idx['ship_id']!=null && String(r[idx['ship_id']])===String(ship_id)) ||
-    (String(r[idx['po_id']!=null?'po_id':'注番']])===String(po_id))
+    (ship_id && idx['ship_id']!=null && String(r[idx['ship_id']]) === String(ship_id)) ||
+    (keyPO && String(r[idx[keyPO]]) === String(po_id))
   );
+
   if(!row) return alert('データが見つかりません');
 
   const initial = {
@@ -542,14 +548,23 @@ function editShip(po_id, ship_id, dat){
     '品番':   row[idx['品番']]||row[idx['part_no']]||'',
     '製造番号': row[idx['製造番号']]||row[idx['製番号']]||'',
     'qty':    row[idx['qty']]||row[idx['数量']]||'',
-    'destination': row[idx['destination']]||row[idx['送り先']]||'',
+    'destination':    row[idx['destination']]||row[idx['送り先']]||'',
     'scheduled_date': row[idx['scheduled_date']]||row[idx['出荷日']]||'',
     'delivery_date':  row[idx['delivery_date']]||row[idx['納入日']]||'',
     'carrier': row[idx['carrier']]||row[idx['運送会社']]||'',
     'note':    row[idx['note']]||row[idx['備考']]||''
   };
-  openForm("出荷予定 編集", SHIP_FIELDS, "saveShip", async ()=>{ await loadShips(); }, initial, { extraHidden: { ship_id: initial.ship_id } });
+
+  openForm(
+    "出荷予定 編集",
+    SHIP_FIELDS,
+    "saveShip",
+    async ()=>{ await loadShips(); },
+    initial,
+    { extraHidden: { ship_id: initial.ship_id } }
+  );
 }
+
 async function deleteShip(po_id, ship_id){
   if(!confirm(`出荷予定を削除しますか？\n注番:${po_id}${ship_id? ' / ID:'+ship_id:''}`)) return;
   try{ await jsonp('deleteShip', { po_id, ship_id }); await loadShips(); }catch(e){ alert('削除失敗: ' + (e?.message || e)); }
