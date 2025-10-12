@@ -1,11 +1,11 @@
 /* =================================================
-   JSONP Frontend (Optimized, clean build)
-   - Dashboard status merge StatusLog
-   - CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧
-   - 操作: QR scanner + 手入力 (OK/NG/工程)
-   - Import / Export / Print
-   - Cuaca (Open-Meteo, cached)
-   ================================================= */
+ JSONP Frontend (Optimized, with Inventory)
+ - Dashboard status merge StatusLog
+ - CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧 / 在庫(表示)
+ - 操作: QR scanner + 手入力 (OK/NG/工程)
+ - Import / Export / Print
+ - Cuaca (Open-Meteo, cached)
+ ================================================= */
 
 const API_BASE = "https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec";
 
@@ -68,18 +68,18 @@ const statusToBadge = (s)=>{
 /* ---------- Auth & Role ---------- */
 let CURRENT_USER = null;
 const ROLE_MAP = {
-  'admin':       { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished'], nav:true },
-  '営業':        { pages:['pageSales','pageDash','pageFinished'], nav:true },
-  '生産管理':     { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
-  '生産管理部':    { pages:['pagePlan','pageShip','pageDash','pageFinished'], nav:true },
-  '製造':        { pages:['pageDash','pageFinished'], nav:true },
-  '検査':        { pages:['pageDash','pageFinished'], nav:true }
+  'admin':       { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished','pageInv'], nav:true },
+  '営業':        { pages:['pageSales','pageDash','pageFinished','pageInv'], nav:true },
+  '生産管理':     { pages:['pagePlan','pageShip','pageDash','pageFinished','pageInv'], nav:true },
+  '生産管理部':    { pages:['pagePlan','pageShip','pageDash','pageFinished','pageInv'], nav:true },
+  '製造':        { pages:['pageDash','pageFinished','pageInv'], nav:true },
+  '検査':        { pages:['pageDash','pageFinished','pageInv'], nav:true }
 };
 function setUser(u){
   CURRENT_USER = u || null;
   $("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "";
 
-  const pages = ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished"];
+  const pages = ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageInv"];
   pages.forEach(p => $("#"+p)?.classList.add("hidden"));
 
   ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToFinPage','btnToInvPage','btnToInvoice','ddSetting','weatherWrap']
@@ -94,6 +94,7 @@ function setUser(u){
     if(allow.pages.includes('pagePlan'))      $("#btnToPlan").classList.remove("hidden");
     if(allow.pages.includes('pageShip'))      $("#btnToShip").classList.remove("hidden");
     if(allow.pages.includes('pageFinished'))  $("#btnToFinPage").classList.remove("hidden");
+    if(allow.pages.includes('pageInv'))       $("#btnToInvPage").classList.remove("hidden");
     $("#ddSetting").classList.remove("hidden");
     $("#weatherWrap").classList.remove("hidden");
     ensureWeather();
@@ -105,16 +106,17 @@ function setUser(u){
 
 /* ---------- Nav ---------- */
 function show(id){
-  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished"]
+  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageInv"]
     .forEach(p=> $("#"+p)?.classList.add("hidden"));
   $("#"+id)?.classList.remove("hidden");
 }
-$("#btnToDash").onclick   = ()=>{ show("pageDash");    refreshAll(); };
-$("#btnToSales").onclick  = ()=>{ show("pageSales");   loadSales(); };
-$("#btnToPlan").onclick   = ()=>{ show("pagePlan");    loadPlans(); };
-$("#btnToShip").onclick   = ()=>{ show("pageShip");    loadShips(); };
-$("#btnToFinPage").onclick= ()=>{ show("pageFinished");loadFinished(); };
-$("#btnLogout").onclick   = ()=> setUser(null);
+$("#btnToDash").onclick     = ()=>{ show("pageDash");    refreshAll(); };
+$("#btnToSales").onclick    = ()=>{ show("pageSales");   loadSales(); };
+$("#btnToPlan").onclick     = ()=>{ show("pagePlan");    loadPlans(); };
+$("#btnToShip").onclick     = ()=>{ show("pageShip");    loadShips(); };
+$("#btnToFinPage").onclick  = ()=>{ show("pageFinished");loadFinished(); };
+$("#btnToInvPage").onclick  = ()=>{ show("pageInv");     loadInventory(); };
+$("#btnLogout").onclick     = ()=> setUser(null);
 
 /* ---------- Login ---------- */
 $("#btnLogin").onclick = loginSubmit;
@@ -529,7 +531,6 @@ function editShip(po_id, ship_id, dat){
   const header = dat.header||[];
   const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
 
-  // Tentukan key untuk kolom PO sekali saja
   const keyPO = (idx['po_id']!=null) ? 'po_id' : (idx['注番']!=null ? '注番' : null);
 
   const row = (dat.rows||[]).find(r =>
@@ -564,7 +565,6 @@ function editShip(po_id, ship_id, dat){
     { extraHidden: { ship_id: initial.ship_id } }
   );
 }
-
 async function deleteShip(po_id, ship_id){
   if(!confirm(`出荷予定を削除しますか？\n注番:${po_id}${ship_id? ' / ID:'+ship_id:''}`)) return;
   try{ await jsonp('deleteShip', { po_id, ship_id }); await loadShips(); }catch(e){ alert('削除失敗: ' + (e?.message || e)); }
@@ -660,6 +660,17 @@ async function loadFinished(){
 }
 $("#btnFinExport")?.addEventListener('click', ()=> exportTableCSV("#tbFin","finished_goods.csv"));
 $("#btnFinPrint")?.addEventListener('click', ()=> window.print());
+
+/* ---------- 在庫 ---------- */
+async function loadInventory(){
+  // Backend akan menghitung dari StatusLog(検査済) - Ship(出荷済)
+  const dat = await cached("listInventory", {}, 5000)
+    .catch(()=>({header:['得意先','品番','品名','図番','数量','備考'], rows:[]}));
+
+  renderTable(dat, "#thInv", "#tbInv", "#invSearch");
+}
+$("#btnInvExport")?.addEventListener('click', ()=> exportTableCSV("#tbInv","inventory.csv"));
+$("#btnInvPrint")?.addEventListener('click', ()=> window.print());
 
 /* ---------- Form dialog generator ---------- */
 let CURRENT_API = null;
