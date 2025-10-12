@@ -1,8 +1,8 @@
 /* =================================================
- JSONP Frontend (Optimized, with Inventory + Station QR)
+ JSONP Frontend (Optimized, with Inventory + Station QR universal)
  - Dashboard status merge StatusLog
  - CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧 / 在庫(表示)
- - 操作: QR per 工程 + 手入力 (OK/NG/工程)
+ - 操作: QR 工程(Station, universal) + 手入力 (OK/NG/工程)
  - Import / Export / Print
  - Cuaca (Open-Meteo, cached)
  ================================================= */
@@ -164,7 +164,7 @@ function renderOrders(){
         <td class="center">${r.updated_by||"—"}</td>
         <td class="center">
           <div class="row">
-            <button class="btn ghost btn-qr"   data-po="${r.po_id}"><i class="fa-solid fa-qrcode"></i> QR</button>
+            <button class="btn ghost btn-stqr"><i class="fa-solid fa-qrcode"></i> 工程QR</button>
             <button class="btn ghost btn-scan" data-po="${r.po_id}"><i class="fa-solid fa-camera"></i> スキャン</button>
             <button class="btn ghost btn-op"   data-po="${r.po_id}"><i class="fa-solid fa-keyboard"></i> 手入力</button>
           </div>
@@ -176,7 +176,7 @@ function renderOrders(){
   }
   paint();
 
-  $$(".btn-qr",tb).forEach(b=> b.onclick = (e)=> openQrMenu(e.currentTarget.dataset.po));
+  $$(".btn-stqr",tb).forEach(b=> b.onclick = openStationQrSheet);
   $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
   $$(".btn-op",tb).forEach(b=> b.onclick=(e)=> openOpDialog(e.currentTarget.dataset.po));
 }
@@ -673,7 +673,6 @@ async function loadInventory(){
   ensureInvControls(dat);
   renderInventory(dat);
 }
-
 function ensureInvControls(dat){
   if($("#invCtrlBar")) return;
   const wrap = $("#thInv")?.closest(".card") || $("#pageInv");
@@ -682,7 +681,6 @@ function ensureInvControls(dat){
   bar.className = "row wrap gap";
   bar.style.margin = "8px 0 12px";
 
-  // build selects
   const h = dat.header||[];
   const idx = Object.fromEntries(h.map((x,i)=>[x,i]));
   const colCust = idx['得意先'];
@@ -705,7 +703,6 @@ function ensureInvControls(dat){
 
   function makeLabel(txt, el){ const w=document.createElement("div"); w.className="row gap s"; w.innerHTML=`<div class="muted s" style="min-width:72px">${txt}</div>`; w.append(el); return w; }
 }
-
 function renderInventory(dat){
   const th = $("#thInv"), tb = $("#tbInv"), search = $("#invSearch");
   th.innerHTML = `<tr>${dat.header.map(h=>`<th>${h}</th>`).join('')}</tr>`;
@@ -741,13 +738,11 @@ function renderInventory(dat){
 
   if(search && !search._invBind){ search._invBind=true; search.oninput = debounce(()=>renderInventory(dat), 250); }
 }
-
 $("#btnInvExport")?.addEventListener('click', ()=> exportTableCSV("#tbInv","inventory.csv"));
 $("#btnInvPrint")?.addEventListener('click', ()=> window.print());
 
 /* ---------- Form dialog generator ---------- */
 let CURRENT_API = null;
-// openForm(title, fields, api, after, initial={}, opts={extraHidden:{}})
 function openForm(title, fields, api, after, initial={}, opts={}){
   CURRENT_API = api;
   $("#dlgTitle").textContent = title;
@@ -831,10 +826,7 @@ function renderTable(dat, thSel, tbSel, searchSel){
 /* ---------- CSV Export / Import ---------- */
 function exportTableCSV(tbodySel, filename){
   const rows = $$(tbodySel+" tr").map(tr=> [...tr.children].map(td=> td.textContent));
-  const csv = rows.map(r => r.map(v=>{
-    const s = (v??'').toString().replace(/"/g,'""'); // CSV-escape quotes
-    return `"${s}"`;
-  }).join(',')).join('\n');
+  const csv = rows.map(r => r.map(v=>{ const s = (v??'').toString().replace(/"/g,'""'); return `"${s}"`; }).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename; a.click();
 }
@@ -854,75 +846,27 @@ function importCSVtoSheet(api, after){
   input.click();
 }
 
-/* ---------- QR GENERATOR: per station & sheet ---------- */
-const QR_PROCESSES = [
+/* =================================================
+   QR 工程 (Station) — UNIVERSAL
+   - QR static untuk semua station, payload: STN|<工程名>
+   - Dapat diakses dari tombol: #btnStationQR atau tombol “工程QR” di baris
+   - Saat scan di dialog produk, app membaca QR station → prompt OK/NG → saveOp
+================================================= */
+const STATION_PROCESSES = [
   "レザー加工","曲げ加工","外注加工/組立","組立",
   "検査工程","検査中","検査済","出荷準備","出荷（組立済）","出荷済"
 ];
-// Format QR kompatibel scanner: PO|工程|OK|NG|備考
-// contoh lengkap: PO-123|検査済|10|0|batchA
-// atau ringan (hanya proses): PO-123|曲げ加工  → app minta OK/NG cepat
-
+const QR_ACCEPT_PATTERNS = [
+  /^STN\|(.+)$/i,      // STN|工程
+  /^PROC[:|](.+)$/i,   // PROC:工程  / PROC|工程
+  /^工程[:|](.+)$/     // 工程:工程  / 工程|工程
+];
 function qrUrl(payload, size=220){
   return `https://chart.googleapis.com/chart?cht=qr&chs=${size}x${size}&chl=${encodeURIComponent(payload)}`;
 }
-function openQrMenu(po){
-  const list = QR_PROCESSES.map(p=>{
-    const payload = `${po}|${p}`;
-    return `<button class="btn ghost w100 btn-qr-one" data-p="${p}" data-po="${po}">${p}</button>`;
-  }).join("");
-  const html = `
-    <dialog id="dlgQrMenu" class="dlg">
-      <h3>QR 工程（PO: ${po}）</h3>
-      <div class="col gap" style="max-width:320px">${list}</div>
-      <div class="row gap" style="margin-top:10px">
-        <button class="btn" id="btnQrAll">すべての工程QR</button>
-        <button class="btn ghost" id="btnQrClose">閉じる</button>
-      </div>
-    </dialog>`;
-  const wrap = document.createElement("div"); wrap.innerHTML = html;
-  document.body.appendChild(wrap);
-  const dlg = wrap.querySelector("#dlgQrMenu");
-  dlg.showModal();
-
-  wrap.querySelectorAll(".btn-qr-one").forEach(b=>{
-    b.onclick = ()=>{
-      const process = b.dataset.p;
-      openQrSingle(po, process);
-    };
-  });
-  wrap.querySelector("#btnQrAll").onclick = ()=> openQrSheet(po);
-  wrap.querySelector("#btnQrClose").onclick = ()=> { dlg.close(); wrap.remove(); };
-}
-function openQrSingle(po, process){
-  const payloadLight = `${po}|${process}`;
-  const payloadFull  = `${po}|${process}|0|0|`;
-  const html = `
-  <html><head><meta charset="utf-8"><title>QR - ${po} / ${process}</title>
-  <style>
-    body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:20px;text-align:center}
-    .muted{color:#6b7280}
-    .s{font-size:12px}
-    .box{display:inline-block;border:1px solid #e5e7eb;border-radius:12px;padding:14px}
-    img{width:260px;height:260px}
-    .row{display:flex;gap:10px;justify-content:center;margin:12px 0}
-    @media print {.row{display:none}}
-  </style></head>
-  <body>
-    <h2>QR 工程（${process}）</h2>
-    <div class="box"><img src="${qrUrl(payloadLight,260)}"><div class="muted s">${payloadLight}</div></div>
-    <div class="row">
-      <button onclick="window.print()">印刷</button>
-      <button onclick="location.reload()">再生成</button>
-    </div>
-    <h3 style="margin-top:18px">オプション: 自動保存用（OK/NG=0）</h3>
-    <div class="box"><img src="${qrUrl(payloadFull,260)}"><div class="muted s">${payloadFull}</div></div>
-  </body></html>`;
-  const w=window.open('about:blank'); w.document.write(html); w.document.close();
-}
-function openQrSheet(po){
-  const tiles = QR_PROCESSES.map(p=>{
-    const payload = `${po}|${p}|0|0|`;
+function openStationQrSheet(){
+  const tiles = STATION_PROCESSES.map(p=>{
+    const payload = `STN|${p}`;
     return `
       <div class="tile">
         <img src="${qrUrl(payload)}" alt="QR ${p}">
@@ -932,7 +876,7 @@ function openQrSheet(po){
   }).join("");
 
   const html = `
-  <html><head><meta charset="utf-8"><title>QR工程 - ${po}</title>
+  <html><head><meta charset="utf-8"><title>工程QR（Station）</title>
   <style>
     body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px;}
     h1{font-size:18px;margin:0 0 12px;}
@@ -947,16 +891,25 @@ function openQrSheet(po){
   </style></head>
   <body>
     <div class="toolbar">
-      <h1>QR 工程シート（PO: ${po}）</h1>
+      <h1>工程QR（Station, universal）</h1>
       <button onclick="window.print()">印刷</button>
     </div>
     <div class="grid">${tiles}</div>
   </body></html>`;
   const w = window.open('about:blank'); w.document.write(html); w.document.close();
 }
+// tombol di menu “設定 > 工程QR” (kalau ada di HTML)
+$("#btnStationQR")?.addEventListener("click", openStationQrSheet);
 
-/* ---------- QR Scan (auto-commit atau prompt OK/NG) ---------- */
+/* ---------- QR Scan (detect station QR → OK/NG prompt) ---------- */
 let scanStream=null, scanRAF=null;
+function parseProcessFromStationQR(text){
+  for(const rx of QR_ACCEPT_PATTERNS){
+    const m = text.match(rx);
+    if(m) return normalizeProc(m[1]);
+  }
+  return null;
+}
 function openScanDialog(po){
   $("#scanResult").textContent = `PO: ${po}`;
   $("#dlgScan").showModal();
@@ -976,29 +929,39 @@ function openScanDialog(po){
           if(scanRAF) cancelAnimationFrame(scanRAF);
           if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
 
-          const parts = String(code.data||'').split('|'); // PO|工程|OK|NG|備考
-          const cPO   = (parts[0]||'').trim();
-          const proc  = normalizeProc(parts[1]||'');
-          const okv   = Number(parts[2]||'');
-          const ngv   = Number(parts[3]||'');
-          const note  = parts[4]||'';
-          const po_id = cPO || po;
+          const raw = String(code.data||'').trim();
 
-          // Auto commit bila OK/NG ada
-          if(Number.isFinite(okv) || Number.isFinite(ngv)){
-            try{
-              await jsonp("saveOp", {
-                data: JSON.stringify({ po_id, process: proc, ok_count: (Number.isFinite(okv)?okv:0), ng_count: (Number.isFinite(ngv)?ngv:0), note }),
-                user: JSON.stringify(CURRENT_USER||{})
-              });
-              $("#scanResult").textContent = `OK: 保存しました (${po_id} / ${proc} / OK=${okv||0} / NG=${ngv||0})`;
-              setTimeout(()=>{ $("#dlgScan").close(); refreshAll(); }, 700);
-            }catch(e){ alert("保存失敗: " + e.message); }
+          // 1) Universal station QR?
+          const stProc = parseProcessFromStationQR(raw);
+          if(stProc){
+            $("#scanResult").textContent = `工程QR: ${stProc}`;
+            quickQuantityPrompt(po, stProc);
             return;
           }
 
-          // Kalau QR hanya PO|工程 → prompt angka singkat
-          quickQuantityPrompt(po_id, proc, note);
+          // 2) Legacy QR: PO|工程|OK|NG|備考
+          const parts = raw.split('|');
+          if(parts.length>=2){
+            const cPO   = (parts[0]||'').trim();
+            const proc  = normalizeProc(parts[1]||'');
+            const okv   = Number(parts[2]||'');
+            const ngv   = Number(parts[3]||'');
+            const note  = parts[4]||'';
+            const po_id = cPO || po;
+
+            if(Number.isFinite(okv) || Number.isFinite(ngv)){
+              try{
+                await jsonp("saveOp", { data: JSON.stringify({ po_id, process: proc, ok_count: (Number.isFinite(okv)?okv:0), ng_count: (Number.isFinite(ngv)?ngv:0), note }), user: JSON.stringify(CURRENT_USER||{}) });
+                $("#scanResult").textContent = `保存: ${po_id} / ${proc} / OK=${okv||0} / NG=${ngv||0}`;
+                setTimeout(()=>{ $("#dlgScan").close(); refreshAll(); }, 700);
+              }catch(e){ alert("保存失敗: " + e.message); }
+              return;
+            }
+            quickQuantityPrompt(po_id, proc, note);
+            return;
+          }
+
+          alert("未対応のQR形式です。'STN|工程' または 'PO|工程|OK|NG|備考' を使用してください。");
           return;
         }
         scanRAF = requestAnimationFrame(tick);
