@@ -159,25 +159,53 @@ function renderOrders(){
     for(; i<end; i++){
       const r = rows[i];
       const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><div class="s muted">注番</div><div><b>${r.po_id||""}</b></div><div class="muted s">${r["得意先"]||"—"}</div></td>
-        <td>${r["品名"]||"—"}</td>
-        <td class="center">${r["品番"]||"—"}</td>
-        <td class="center">${r["図番"]||"—"}</td>
-        <td class="center">${statusToBadge(r.status)}</td>
-        <td class="center">
-          ${procToChip(r.current_process)}
-          ${countsBadge(r.ok_count, r.ng_count)}
-        </td>
-        <td class="center">${fmt(r.updated_at)}</td>
-        <td class="center">${r.updated_by||"—"}</td>
-        <td class="center">
-          <div class="row">
-            <button class="btn ghost btn-stqr"><i class="fa-solid fa-qrcode"></i> 工程QR</button>
-            <button class="btn ghost btn-scan" data-po="${r.po_id}"><i class="fa-solid fa-camera"></i> スキャン</button>
-            <button class="btn ghost btn-op"   data-po="${r.po_id}"><i class="fa-solid fa-keyboard"></i> 手入力</button>
-          </div>
-        </td>`;
+     tr.innerHTML = `
+  <td>
+    <div class="s muted">注番</div>
+    <div><b>${r.po_id||""}</b></div>
+    <div class="muted s">${r["得意先"]||"—"}</div>
+  </td>
+  <td>${r["品名"]||"—"}</td>
+  <td class="center">${r["品番"]||"—"}</td>
+  <td class="center">${r["図番"]||"—"}</td>
+
+  <!-- 状態 -->
+  <td class="center">
+    <div class="cell-stack">
+      ${statusToBadge(r.status)}
+      <div class="xs muted"></div>
+    </div>
+  </td>
+
+  <!-- 工程 + OK/NG kecil -->
+  <td class="center">
+    <div class="cell-stack">
+      ${procToChip(r.current_process)}
+      <div class="counts">
+        <span class="count ok">OK:${r.ok_count ?? 0}</span>
+        <span class="count ng">NG:${r.ng_count ?? 0}</span>
+      </div>
+    </div>
+  </td>
+
+  <td class="center">${fmt(r.updated_at)}</td>
+  <td class="center">${r.updated_by||"—"}</td>
+
+  <!-- 操作  -->
+  <td class="center">
+    <div class="actions">
+      <button class="btn icon ghost btn-stqr" title="工程QR">
+        <i class="fa-solid fa-qrcode"></i><span>工程QR</span>
+      </button>
+      <button class="btn icon ghost btn-scan" data-po="${r.po_id}" title="スキャン">
+        <i class="fa-solid fa-camera"></i><span>スキャン</span>
+      </button>
+      <button class="btn icon ghost btn-op" data-po="${r.po_id}" title="手入力">
+        <i class="fa-solid fa-keyboard"></i><span>手入力</span>
+      </button>
+    </div>
+  </td>`;
+
       frag.appendChild(tr);
     }
     tb.appendChild(frag);
