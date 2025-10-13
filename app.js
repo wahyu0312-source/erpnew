@@ -1,13 +1,6 @@
 /* =================================================
-JSONP Frontend (Optimized, with Inventory + Station QR universal)
-- Dashboard status merge StatusLog
-- CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧 / 在庫(表示)
-- 操作: QR 工程(Station, universal) + 手入力 (OK/NG/工程)
-- Import / Export / Print
-- Cuaca (Open-Meteo, cached)
-- 請求書 (multi-line) + PriceMaster + PDF
+JSONP Frontend (Optimized, with Inventory + Station QR universal + Invoices)
 ================================================= */
-
 const API_BASE = "https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec";
 
 /* ---------- DOM helpers ---------- */
@@ -516,3 +509,302 @@ function renderWeather(v){
 }
 function debounce(fn, wait){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); }; }
 document.addEventListener("DOMContentLoaded", ()=> setUser(null));
+
+
+/* ============================================================
+   ===== 請求書 (Invoices) — menu, editor, list, PDF =====
+   - 新規: isi header → 出荷済から追加 → edit unit price kalau perlu → 保存
+   - Status: 発行済 / 支払済
+   - PDF: tombol di editor & per baris daftar
+============================================================ */
+const INV_STATUS = ["発行済","支払済"];
+
+function navShow(id){
+  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageInv","pageInvoice"]
+    .forEach(p=> document.getElementById(p)?.classList.add("hidden"));
+  document.getElementById(id)?.classList.remove("hidden");
+}
+document.getElementById("btnToInvoice").onclick = ()=>{ navShow("pageInvoice"); loadInvoiceList(); };
+
+/* ---- List view ---- */
+async function loadInvoiceList(){
+  const list = await jsonp("listInvoices").catch(()=>({header:[],rows:[]}));
+  const head = list.header||[];
+  const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(),i]));
+  const tb = document.getElementById("tbInvoices");
+  const th = document.getElementById("thInvoices");
+  th.innerHTML = `<tr><th>請求No</th><th>得意先</th><th>請求先</th><th>請求日</th><th>税率</th><th>通貨</th><th>状態</th><th>操作</th></tr>`;
+  tb.innerHTML = '';
+
+  const toDate = (v)=>{ const d=(v instanceof Date)?v:new Date(v); return isNaN(d)?'':d.toLocaleDateString('ja-JP'); };
+
+  (list.rows||[]).forEach(r=>{
+    const inv = r[idx['invoice_id']] || r[0];
+    const tr  = document.createElement('tr');
+    tr.innerHTML = `
+      <td><b>${inv||''}</b></td>
+      <td>${r[idx['得意先']]||''}</td>
+      <td>${r[idx['請求先']]||''}</td>
+      <td>${toDate(r[idx['請求日']])||''}</td>
+      <td>${r[idx['税率']]??''}</td>
+      <td>${r[idx['通貨']]||''}</td>
+      <td>${r[idx['状態']]||''}</td>
+      <td class="center">
+        <div class="row">
+          <button class="btn ghost btn-edit-inv" data-id="${inv}"><i class="fa-regular fa-pen-to-square"></i> 編集</button>
+          <button class="btn ghost btn-pdf" data-id="${inv}"><i class="fa-regular fa-file-pdf"></i> PDF</button>
+          <button class="btn ghost btn-del-inv" data-id="${inv}"><i class="fa-regular fa-trash-can"></i> 削除</button>
+        </div>
+      </td>`;
+    tb.appendChild(tr);
+  });
+
+  document.querySelectorAll(".btn-edit-inv").forEach(b=> b.onclick = (e)=> openInvoiceEditor(e.currentTarget.dataset.id));
+  document.querySelectorAll(".btn-del-inv").forEach(b=> b.onclick = async (e)=>{
+    const id = e.currentTarget.dataset.id;
+    if(!confirm(`請求書 ${id} を削除しますか？`)) return;
+    await jsonp("deleteInvoice", { invoice_id: id });
+    await loadInvoiceList();
+  });
+  document.querySelectorAll(".btn-pdf").forEach(b=> b.onclick = (e)=> openInvoicePdf(e.currentTarget.dataset.id));
+}
+document.getElementById("btnInvoiceCreate").onclick = ()=> openInvoiceEditor('');
+
+/* ---- Editor ---- */
+const INV_HEADER_FIELDS = [
+  {name:'invoice_id', label:'請求No'},
+  {name:'得意先',     label:'得意先', type:'select', options:()=>MASTERS.customers, free:true},
+  {name:'請求先',     label:'請求先'},
+  {name:'請求日',     label:'請求日', type:'date'},
+  {name:'税率',       label:'税率(%)'},
+  {name:'通貨',       label:'通貨',   type:'select', options:['JPY','USD','IDR','EUR']},
+  {name:'状態',       label:'状態',   type:'select', options: INV_STATUS},
+  {name:'備考',       label:'備考'},
+];
+
+async function openInvoiceEditor(invoice_id){
+  const dlg = document.getElementById("dlgInvoice");
+  const body= document.getElementById("invFormBody");
+  const linesWrap = document.getElementById("invLines");
+  const btnAdd    = document.getElementById("btnAddFromShipped");
+  const btnSave   = document.getElementById("btnInvSave");
+  const btnPdf    = document.getElementById("btnInvPdf");
+
+  // load header+lines kalau ada
+  let header = {}, lines=[];
+  if(invoice_id){
+    const pack = await jsonp("exportInvoice", { invoice_id });
+    header = pack.header || {};
+    lines  = pack.lines  || [];
+  }else{
+    header = { 状態:'発行済', 税率:'10', 通貨:'JPY', 請求日: new Date().toISOString().slice(0,10) };
+    lines  = [];
+  }
+
+  // render header fields
+  body.innerHTML = '';
+  INV_HEADER_FIELDS.forEach(x=>{
+    const wrap = document.createElement('div'); wrap.className = 'form-item';
+    const label = `<div class="muted s">${x.label}</div>`;
+    let html = '';
+    const val = header[x.name] ?? '';
+    if(x.type==='select' && x.free){
+      const id = `dl-${x.name}-${Math.random().toString(36).slice(2)}`;
+      const opts = (typeof x.options==='function'? x.options(): x.options)||[];
+      html = `<input name="${x.name}" list="${id}" value="${val??''}" placeholder="${x.label}"><datalist id="${id}">${opts.map(o=>`<option value="${o}">`).join('')}</datalist>`;
+    }else if(x.type==='select'){
+      const opts = (typeof x.options==='function'? x.options(): x.options)||[];
+      html = `<select name="${x.name}">${opts.map(o=>`<option value="${o}">${o}</option>`).join('')}</select>`;
+      setTimeout(()=>{ const s=body.querySelector(`[name="${x.name}"]`); if(s) s.value=String(val??''); },0);
+    }else if(x.type==='date'){
+      const iso = val ? new Date(val).toISOString().slice(0,10) : '';
+      html = `<input name="${x.name}" type="date" value="${iso}">`;
+    }else{
+      html = `<input name="${x.name}" value="${val??''}" placeholder="${x.label}">`;
+    }
+    wrap.innerHTML = label+html;
+    body.appendChild(wrap);
+  });
+
+  // render lines editable
+  const drawLines = ()=>{
+    linesWrap.innerHTML = `
+      <table class="table s">
+        <thead><tr>
+          <th style="width:110px">注番</th><th>品名</th><th>品番</th><th>図番</th>
+          <th class="right" style="width:100px">数量</th>
+          <th class="right" style="width:120px">単価</th>
+          <th class="right" style="width:120px">金額</th>
+          <th>備考</th><th></th>
+        </tr></thead>
+        <tbody id="invTB"></tbody>
+      </table>`;
+    const tb = document.getElementById('invTB');
+    tb.innerHTML = '';
+    lines.forEach((ln,idx)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input class="cell" data-k="注番" value="${ln['注番']||''}"></td>
+        <td><input class="cell" data-k="品名" value="${ln['品名']||''}"></td>
+        <td><input class="cell" data-k="品番" value="${ln['品番']||''}"></td>
+        <td><input class="cell" data-k="図番" value="${ln['図番']||''}"></td>
+        <td class="right"><input class="cell right" data-k="数量" type="number" step="1" value="${ln['数量']||0}"></td>
+        <td class="right"><input class="cell right" data-k="単価" type="number" step="0.01" value="${ln['単価']||0}"></td>
+        <td class="right"><input class="cell right" data-k="金額" type="number" step="0.01" value="${ln['金額']|| (Number(ln['数量']||0)*Number(ln['単価']||0)).toFixed(2)}"></td>
+        <td><input class="cell" data-k="備考" value="${ln['備考']||''}"></td>
+        <td class="center"><button class="btn ghost btn-del-line" data-idx="${idx}"><i class="fa-regular fa-trash-can"></i></button></td>
+      `;
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll('.cell').forEach(inp=>{
+      inp.oninput = ()=>{
+        const tr = inp.closest('tr'); const rowIndex = [...tr.parentNode.children].indexOf(tr);
+        const key = inp.dataset.k; let v = inp.value;
+        if(key==='数量' || key==='単価' || key==='金額') v = Number(v||0);
+        lines[rowIndex][key]=v;
+        if(key==='数量' || key==='単価'){ lines[rowIndex]['金額'] = Number(lines[rowIndex]['数量']||0) * Number(lines[rowIndex]['単価']||0); drawLines(); }
+      };
+    });
+    tb.querySelectorAll('.btn-del-line').forEach(b=> b.onclick = ()=>{ lines.splice(Number(b.dataset.idx),1); drawLines(); });
+  };
+  drawLines();
+
+  // add from shipped
+  btnAdd.onclick = async ()=>{
+    // pilih PO dari Shipments yang 出荷済 (checklist sederhana)
+    const list = await jsonp("listShip");
+    const head = list.header||[]; const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(),i]));
+    const statusCol = idx['status'] ?? idx['状態'];
+    const poCol = idx['po_id'] ?? idx['注番'];
+    const rows = (list.rows||[]).filter(r => /出荷済/.test(String(r[statusCol]||'')));
+    const pos = [...new Set(rows.map(r=> String(r[poCol]||'')).filter(Boolean))];
+    if(!pos.length){ alert('出荷済データがありません'); return; }
+
+    // quick picker
+    const html = `
+      <dialog id="dlgPick" class="paper">
+        <div class="body"><h3>出荷済から追加</h3>
+          <div style="max-height:45vh;overflow:auto;border:1px solid var(--border);border-radius:12px;padding:.5rem">
+            ${pos.map(p=>`<label class="row" style="padding:.25rem .35rem"><input type="checkbox" value="${p}"> <span>${p}</span></label>`).join('')}
+          </div>
+        </div>
+        <footer class="row-end">
+          <button class="btn ghost" id="pkCancel">閉じる</button>
+          <button class="btn" id="pkOk">追加</button>
+        </footer>
+      </dialog>`;
+    const wrap=document.createElement('div'); wrap.innerHTML=html; document.body.appendChild(wrap);
+    const dlgP=wrap.querySelector('#dlgPick'); dlgP.showModal();
+    wrap.querySelector('#pkCancel').onclick = ()=>{ dlgP.close(); wrap.remove(); };
+    wrap.querySelector('#pkOk').onclick = async ()=>{
+      const sel = [...wrap.querySelectorAll('input[type="checkbox"]:checked')].map(c=>c.value);
+      if(!sel.length){ alert('選択してください'); return; }
+      const invId = (body.querySelector('[name="invoice_id"]').value || '').trim() || `INV-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*900)+100}`;
+      body.querySelector('[name="invoice_id"]').value = invId;
+      const resp = await jsonp("invoiceAddFromShip", { invoice_id: invId, po_list: JSON.stringify(sel) });
+      // merge ke lines
+      const pack = await jsonp("exportInvoice", { invoice_id: invId });
+      lines = pack.lines || [];
+      drawLines();
+      dlgP.close(); wrap.remove();
+    };
+  };
+
+  // save header + semua lines
+  btnSave.onclick = async ()=>{
+    // header
+    const data = {};
+    body.querySelectorAll('[name]').forEach(i=>{
+      let v = i.value;
+      if(i.type==='date' && v) v = new Date(v).toISOString().slice(0,10);
+      data[i.name]=v;
+    });
+    const invId = data.invoice_id || '';
+    await jsonp("saveInvoice", { data: JSON.stringify(data), user: JSON.stringify(CURRENT_USER||{}) });
+
+    // save lines
+    for(const [i,ln] of lines.entries()){
+      const payload = { ...ln, invoice_id: data.invoice_id, 行番: ln['行番'] || (i+1) };
+      await jsonp("saveInvoiceLine", { data: JSON.stringify(payload), user: JSON.stringify(CURRENT_USER||{}) });
+    }
+    alert('保存しました');
+    dlg.close();
+    await loadInvoiceList();
+  };
+
+  // pdf preview
+  btnPdf.onclick = ()=>{
+    const invId = (body.querySelector('[name="invoice_id"]').value||'').trim();
+    if(!invId){ alert('先に保存してください'); return; }
+    openInvoicePdf(invId);
+  };
+
+  document.getElementById("btnInvCancel").onclick = ()=> dlg.close();
+  dlg.showModal();
+}
+
+/* ---- PDF window ---- */
+async function openInvoicePdf(invoice_id){
+  const pack = await jsonp("exportInvoice", { invoice_id });
+  if(!pack || !pack.header) return alert('データが見つかりません');
+
+  const H = pack.header, L = pack.lines||[];
+  const d = (v)=>{ const x=(v instanceof Date)?v:new Date(v); return isNaN(x)?'':x.toLocaleDateString('ja-JP'); };
+  const taxRate = Number(H['税率']||0)/100;
+  const sub = L.reduce((s,x)=> s + Number(x['金額']|| (Number(x['数量']||0)*Number(x['単価']||0))), 0);
+  const tax= Math.round(sub*taxRate);
+  const tot= sub+tax;
+
+  const rowsHtml = L.map(x=>`
+    <tr>
+      <td class="t-center">${x['注番']||''}</td>
+      <td>${x['品名']||''}</td>
+      <td class="t-center">${x['品番']||''}</td>
+      <td class="t-center">${x['図番']||''}</td>
+      <td class="t-right">${Number(x['数量']||0).toLocaleString()}</td>
+      <td class="t-right">${Number(x['単価']||0).toLocaleString()}</td>
+      <td class="t-right">${Number(x['金額']|| (Number(x['数量']||0)*Number(x['単価']||0))).toLocaleString()}</td>
+      <td>${x['備考']||''}</td>
+    </tr>`).join('');
+
+  const html = `
+  <html><head><meta charset="utf-8"><title>請求書 ${invoice_id}</title>
+  <link rel="stylesheet" href="./style.css">
+  <style>
+  /* inline fallback jika style.css tidak termuat saat offline */
+  </style>
+  </head>
+  <body class="inv-body">
+  <div class="invoice">
+    <div class="inv-head">
+      <div class="inv-title">請 求 書</div>
+      <div class="inv-meta">
+        <div><span>請求No</span><b>${invoice_id}</b></div>
+        <div><span>請求日</span><b>${d(H['請求日'])}</b></div>
+        <div><span>通貨</span><b>${H['通貨']||''}</b></div>
+        <div><span>状態</span><b>${H['状態']||''}</b></div>
+      </div>
+    </div>
+    <div class="inv-to">
+      <div class="box"><div class="lbl">得意先</div><div class="val">${H['得意先']||''}</div></div>
+      <div class="box"><div class="lbl">請求先</div><div class="val">${H['請求先']||''}</div></div>
+    </div>
+    <table class="inv-table">
+      <thead><tr><th>注番</th><th>品名</th><th>品番</th><th>図番</th><th class="t-right">数量</th><th class="t-right">単価</th><th class="t-right">金額</th><th>備考</th></tr></thead>
+      <tbody>${rowsHtml || '<tr><td colspan="8" class="t-center muted">明細はありません</td></tr>'}</tbody>
+      <tfoot>
+        <tr><td colspan="6" class="t-right">小計</td><td class="t-right">${sub.toLocaleString()}</td><td></td></tr>
+        <tr><td colspan="6" class="t-right">消費税 (${H['税率']||0}%)</td><td class="t-right">${tax.toLocaleString()}</td><td></td></tr>
+        <tr><td colspan="6" class="t-right"><b>合計</b></td><td class="t-right"><b>${tot.toLocaleString()}</b></td><td></td></tr>
+      </tfoot>
+    </table>
+    <div class="inv-note">${H['備考']||''}</div>
+  </div>
+  <div class="inv-actions noprint">
+    <button onclick="window.print()" class="btn">PDF / 印刷</button>
+    <button onclick="window.close()" class="btn ghost">閉じる</button>
+  </div>
+  </body></html>`;
+  const w = window.open('about:blank');
+  w.document.write(html); w.document.close();
+}
