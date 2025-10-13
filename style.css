@@ -1,11 +1,11 @@
 :root{
-  --bg:#f6f8fb; --card:#ffffff; --text:#0f172a; --muted:#64748b;
-  --brand:#0ea5a4; --brand-600:#0d9488; --border:#e2e8f0;
-  --ring:rgba(14,165,164,.25); --shadow:0 8px 28px rgba(2,6,23,.08);
+--bg:#f6f8fb; --card:#ffffff; --text:#0f172a; --muted:#64748b;
+--brand:#0ea5a4; --brand-600:#0d9488; --border:#e2e8f0;
+--ring:rgba(14,165,164,.25); --shadow:0 8px 28px rgba(2,6,23,.08);
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0;font:14px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;background:var(--bg);color:var(--text)}
+body{margin:0;font:14px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,'Hiragino Kaku Gothic ProN','Meiryo',sans-serif;background:var(--bg);color:var(--text)}
 .nav{position:sticky;top:0;z-index:30;background:linear-gradient(180deg,#0ea5a4,#0b8b86);color:#fff;padding:.75rem 1rem;display:flex;align-items:center;gap:1rem;box-shadow:0 6px 14px rgba(13,148,136,.25)}
 .nav .brand{font-weight:800}
 .nav .logo{width:28px;height:28px;border-radius:6px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.2))}
@@ -38,8 +38,8 @@ body{margin:0;font:14px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,'Hiragino 
 .req{ color:#dc2626; font-weight:700; margin-left:.25rem }
 .form-item label{ display:flex; align-items:center; gap:.25rem; font-size:.9rem; color:var(--muted) }
 input:required:invalid, select:required:invalid{
-  border-color:#fecaca;
-  box-shadow:0 0 0 .18rem rgba(239,68,68,.15);
+border-color:#fecaca;
+box-shadow:0 0 0 .18rem rgba(239,68,68,.15);
 }
 
 .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
@@ -70,20 +70,20 @@ dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
 
 /* Print A4 */
 @media print {
-  @page{size:A4 portrait;margin:12mm}
-  .nav,.btn,.dropdown-inline,input[type="file"]{display:none!important}
-  .container{max-width:100%;padding:0}
-  .card{box-shadow:none;border:1px solid #ddd;padding:.6rem}
-  table.table{font-size:12px}
-  .table th,.table td{padding:.35rem .4rem;white-space:normal}
+@page{size:A4 portrait;margin:12mm}
+.nav,.btn,.dropdown-inline,input[type="file"]{display:none!important}
+.container{max-width:100%;padding:0}
+.card{box-shadow:none;border:1px solid #ddd;padding:.6rem}
+table.table{font-size:12px}
+.table th,.table td{padding:.35rem .4rem;white-space:normal}
 }
 /* Weather pill */
 #weatherWrap{
-  padding:.25rem .6rem;
-  border-radius:999px;
-  background:rgba(255,255,255,.18);
-  color:#fff;
-  backdrop-filter: saturate(120%) blur(2px);
+padding:.25rem .6rem;
+border-radius:999px;
+background:rgba(255,255,255,.18);
+color:#fff;
+backdrop-filter: saturate(120%) blur(2px);
 }
 #weatherWrap i{ opacity:.95 }
 #weatherWrap span{ color:#fff }
@@ -95,23 +95,23 @@ dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
 
 /* Stack untuk Status / 工程 */
 .cell-stack {
-  display: flex; flex-direction: column; align-items: center;
-  gap: 6px; line-height: 1.15;
+display: flex; flex-direction: column; align-items: center;
+gap: 6px; line-height: 1.15;
 }
 
 /* Badge status: sedikit lebih padat */
 .badge { display:inline-flex; align-items:center; gap:6px;
-  padding:6px 10px; border-radius:999px; font-weight:600; font-size:13px; }
+padding:6px 10px; border-radius:999px; font-weight:600; font-size:13px; }
 
 /* Chip proses: padat */
 .chip { display:inline-flex; align-items:center; gap:6px;
-  padding:6px 10px; border-radius:999px; font-weight:600; font-size:13px; }
+padding:6px 10px; border-radius:999px; font-weight:600; font-size:13px; }
 
 /* OK/NG kecil & kompak */
 .counts { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
 .count {
-  display:inline-flex; align-items:center; border:1px solid #e5e7eb;
-  border-radius:999px; padding:2px 8px; font-size:12px; font-weight:700;
+display:inline-flex; align-items:center; border:1px solid #e5e7eb;
+border-radius:999px; padding:2px 8px; font-size:12px; font-weight:700;
 }
 .count.ok { background:#f6fffb; border-color:#b7f0d3; }
 .count.ng { background:#fff7f7; border-color:#f3c1c1; }
@@ -119,73 +119,15 @@ dialog .body{padding:1rem 1rem 0} dialog footer{padding:0 1rem 1rem}
 /* Kolom 操作: ikon-ghost kecil, rapi, bisa wrap */
 .actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
 .btn.icon {
-  display:inline-flex; align-items:center; gap:6px;
-  padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb;
-  background:#fff; cursor:pointer;
+display:inline-flex; align-items:center; gap:6px;
+padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb;
+background:#fff; cursor:pointer;
 }
 .btn.icon.ghost:hover { background:#f8fafc; }
 .btn.icon i { font-size:14px; }
 
 /* Responsif: kecilkan label tombol di layar sempit */
 @media (max-width: 980px){
-  .btn.icon span{ display:none; }  /* ikon-only */
-}
-/* ===== Invoice premium ===== */
-.inv-body{ background:#fff; }
-.invoice{
-  max-width:900px; margin:22px auto; padding:24px 26px;
-  background:#fff; color:#0f172a; border:1px solid #e5e7eb; border-radius:16px;
-  box-shadow: 0 10px 30px rgba(2,6,23,.06);
-}
-.inv-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin-bottom:14px }
-.inv-title{
-  font-size:28px; letter-spacing:.35rem; font-weight:800; color:#0b8b86;
-  padding:.35rem .9rem; border:1px solid #c7f2ee; border-radius:12px; background:linear-gradient(180deg,#ecfeff,#fff);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.8);
-}
-.inv-meta{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px 14px; min-width:280px }
-.inv-meta > div{ display:flex; justify-content:space-between; align-items:center;
-  padding:.4rem .6rem; border:1px dashed #dbeafe; border-radius:10px; background:#f8fafc; font-size:12px; }
-.inv-meta span{ color:#475569 }
-.inv-meta b{ font-size:13px }
-
-.inv-to{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:6px 0 14px }
-.inv-to .box{ border:1px solid #e5e7eb; border-radius:12px; padding:.6rem .7rem; background:#fcfcfd }
-.inv-to .lbl{ font-size:12px; color:#64748b; margin-bottom:4px }
-.inv-to .val{ font-weight:700 }
-
-.inv-table{ width:100%; border-collapse:separate; border-spacing:0; margin-top:4px; font-size:13px }
-.inv-table th, .inv-table td{
-  border-bottom:1px solid #eceff3; padding:.55rem .6rem; background:#fff;
-}
-.inv-table thead th{
-  position:sticky; top:0; background:#f6f8fb; z-index:1; font-weight:800;
-  border-bottom:1px solid #e2e8f0;
-}
-.inv-table tbody tr:hover td{ background:#fafcff }
-.inv-table tfoot td{
-  background:#fbfcff; font-weight:700; border-top:1px solid #e7eaf0;
-}
-.t-right{text-align:right}.t-center{text-align:center}
-.muted{color:#64748b}
-
-.inv-note{
-  margin-top:10px; font-size:12.5px; color:#475569;
-  padding:.6rem .7rem; border:1px dashed #e2e8f0; border-radius:10px; background:#fafafa;
+.btn.icon span{ display:none; } /* ikon-only */
 }
 
-.inv-actions{ max-width:900px; margin:10px auto 24px; display:flex; gap:10px; justify-content:flex-end }
-.noprint{ display:block }
-@media print{
-  @page{ size:A4 portrait; margin:12mm }
-  .noprint{ display:none!important }
-  body{ background:#fff }
-  .invoice{ box-shadow:none; border-color:#ddd }
-}
-
-/* input kecil untuk cell invoice editor */
-#invLines input.cell{
-  width:100%; padding:.35rem .45rem; border-radius:8px; border:1px solid #e5e7eb;
-  background:#fff; outline:0; font-size:12.5px;
-}
-#invLines input.cell:focus{ border-color:#0ea5a4; box-shadow:0 0 0 .16rem rgba(14,165,164,.15) }
