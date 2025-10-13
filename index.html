@@ -48,7 +48,6 @@
           <i class="fa-solid fa-gear"></i> 設定 <i class="fa-solid fa-caret-down caret" style="margin-left:.25rem"></i>
         </summary>
         <div class="menu right">
-          <!-- FIX: id harus btnStationQR agar match dengan app.js -->
           <button id="btnStationQR" class="menu-item"
                   onclick="this.closest('details')?.removeAttribute('open')">
             <i class="fa-solid fa-qrcode"></i> 工程QR
@@ -100,7 +99,6 @@
         </table>
       </div>
 
-      <!-- 下: 本日出荷 + 出荷予定 -->
       <div class="grid grid-ship-panels" style="margin-top:1rem">
         <section class="card sub">
           <header class="row-between">
@@ -227,7 +225,28 @@
     </section>
   </main>
 
-  <!-- Dialog: Create / Edit -->
+  <!-- 請求書 -->
+  <main id="pageInvoice" class="container hidden">
+    <section class="card">
+      <header class="row-between">
+        <h3><i class="fa-regular fa-file-lines"></i> 請求書</h3>
+        <div class="row gap">
+          <button id="btnInvNew" class="btn"><i class="fa-solid fa-plus"></i> 新規</button>
+          <input id="invoiceSearch" placeholder="検索..." class="input">
+          <button id="btnInvExportList" class="btn ghost"><i class="fa-solid fa-file-export"></i> Export</button>
+          <button id="btnInvPrintList"  class="btn ghost"><i class="fa-solid fa-print"></i> Print</button>
+        </div>
+      </header>
+      <div class="table-wrap" style="max-height:60vh">
+        <table class="table s">
+          <thead id="thInvoice"></thead>
+          <tbody id="tbInvoice"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Dialogs -->
   <dialog id="dlgForm" class="paper">
     <div class="body">
       <h3 id="dlgTitle">作成</h3>
@@ -239,7 +258,6 @@
     </footer>
   </dialog>
 
-  <!-- Dialog: QR Scan -->
   <dialog id="dlgScan" class="paper">
     <div class="body">
       <h3>QRスキャン</h3>
@@ -253,7 +271,6 @@
     </footer>
   </dialog>
 
-  <!-- Dialog: 手入力 (OK/NG/工程) -->
   <dialog id="dlgOp" class="paper">
     <div class="body">
       <h3>手入力 <span class="muted s">(PO: <span id="opPO"></span>)</span></h3>
@@ -282,7 +299,6 @@
     </footer>
   </dialog>
 
-  <!-- Tutup dropdown saat klik di luar (untuk <details>) -->
   <script>
     document.addEventListener('click', (e)=>{
       const dd = document.getElementById('ddSetting');
