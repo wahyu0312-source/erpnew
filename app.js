@@ -408,26 +408,131 @@ a.href = URL.createObjectURL(blob); a.download = 'sales_template.csv'; a.click()
 });
 
 /* ---------- 生産計画 ---------- */
+/* ---------- 生産計画 ---------- */
 const PLAN_FIELDS = [
-{name:'po_id', label:'注番', type:'select', options:()=>MASTERS.po_ids, free:true, req:true},
-{name:'得意先', label:'得意先', type:'select', options:()=>MASTERS.customers, free:true},
-{name:'図番', label:'図番', type:'select', options:()=>MASTERS.drawings, free:true},
-{name:'品名', label:'品名', type:'select', options:()=>MASTERS.item_names, free:true},
-{name:'品番', label:'品番', type:'select', options:()=>MASTERS.part_nos, free:true},
-{name:'current_process', label:'工程(開始)', type:'select', options: PROCESS_OPTIONS},
-{name:'status', label:'状態', type:'select', options:["進行","組立中","組立済","検査中","検査済","出荷準備","出荷済"]},
-{name:'start_date', label:'開始日', type:'date'},
-{name:'due_date', label:'完了予定', type:'date'},
-{name:'note', label:'備考'}
+  {name:'po_id',      label:'注番',    type:'select', options:()=>MASTERS.po_ids,  free:true, req:true},
+  {name:'得意先',     label:'得意先',  type:'select', options:()=>MASTERS.customers, free:true},
+  {name:'図番',       label:'図番',    type:'select', options:()=>MASTERS.drawings,  free:true},
+  {name:'品名',       label:'品名',    type:'select', options:()=>MASTERS.item_names,free:true},
+  {name:'品番',       label:'品番',    type:'select', options:()=>MASTERS.part_nos,  free:true},
+  {name:'製造番号',   label:'製造番号'},
+  {name:'qty',        label:'数量'},
+  {name:'due_date',   label:'納期希望', type:'date'},
+  {name:'start_date', label:'開始希望', type:'date'},
+  {name:'note',       label:'備考'}
 ];
-async function loadPlans(){
-const dat = await cached("listPlans");
-renderTable(dat, "#thPlan", "#tbPlan", "#planSearch");
+/* Header tampilan tabel 生産計画 (JP only) */
+const PLAN_VIEW = [
+  {label:'注番',     keys:['po_id','注番']},
+  {label:'得意先',   keys:['得意先','customer']},
+  {label:'品番',     keys:['品番','part_no']},
+  {label:'製造番号', keys:['製造番号','製番号']},
+  {label:'品名',     keys:['品名','item_name']},
+  {label:'図番',     keys:['図番','drawing_no']},
+  {label:'数量',     keys:['qty','数量']},
+  {label:'納期希望', keys:['納期希望','due_date','完了予定','due']},
+  {label:'開始希望', keys:['開始希望','start_date','開始日']},
+  {label:'備考',     keys:['備考','note']}
+];
+
+/* helper ambil row by PO (pakai yang sudah ada kalau sama) */
+function rowToObjectPlan(dat, po_id){
+  const header = dat.header || [];
+  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
+  const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
+  const row = (dat.rows||[]).find(r => String(r[idx[keyPO]])===String(po_id));
+  if(!row) return null;
+  const obj = {}; header.forEach((h,i)=> obj[String(h).trim()] = row[i]); obj.po_id = obj.po_id || obj['注番'] || po_id; return obj;
 }
+
+/* renderer slim: header JP & urutan PLAN_VIEW */
+function renderPlansSlim(dat){
+  const th = $("#thPlan"), tb = $("#tbPlan"), search = $("#planSearch");
+  const header = dat.header || [];
+  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
+  const pick = (row, keys)=>{ for(const k of keys){ const i=idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
+
+  th.innerHTML = `<tr>${PLAN_VIEW.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr>`;
+
+  const render = ()=>{
+    const q = (search?.value||'').toLowerCase();
+    tb.innerHTML = '';
+    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+
+    let i=0; const chunk=150;
+    function paint(){
+      const end=Math.min(i+chunk, rows.length);
+      const frag=document.createDocumentFragment();
+      for(;i<end;i++){
+        const r = rows[i];
+        const po = String(pick(r, ['po_id','注番'])||'');
+        const tds = PLAN_VIEW.map(col=>{
+          let v = pick(r, col.keys);
+          if(v && /希望/.test(col.label)){ const d=(v instanceof Date)?v:new Date(v); if(!isNaN(d)) v = d.toLocaleDateString('ja-JP'); }
+          return `<td>${v ?? ''}</td>`;
+        }).join('');
+        const tr=document.createElement('tr');
+        tr.innerHTML = `${tds}
+        <td class="center">
+          <div class="row">
+            <button class="btn ghost btn-edit-plan" data-po="${po}"><i class="fa-regular fa-pen-to-square"></i> 編集</button>
+          </div>
+        </td>`;
+        frag.appendChild(tr);
+      }
+      tb.appendChild(frag);
+      if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
+
+      if(i>=rows.length){
+        $$(".btn-edit-plan", tb).forEach(b=> b.onclick = (e)=> editPlan(e.currentTarget.dataset.po, dat));
+      }
+    }
+    paint();
+  };
+  if(search && !search._bind){ search._bind = true; search.oninput = debounce(render, 250); }
+  render();
+}
+
+/* form 編集/作成 dengan label JP hanya */
+function editPlan(po_id, dat){
+  const obj = rowToObjectPlan(dat, po_id);
+  if(!obj) return alert('データが見つかりません');
+  const initial = {
+    po_id: obj.po_id || obj['注番'] || '',
+    '得意先': obj['得意先'] || obj.customer || '',
+    '図番': obj['図番'] || obj.drawing_no || '',
+    '品名': obj['品名'] || obj.item_name || '',
+    '品番': obj['品番'] || obj.part_no || '',
+    '製造番号': obj['製造番号'] || obj['製番号'] || '',
+    'qty': obj['数量'] || obj['qty'] || '',
+    'due_date': obj['納期希望'] || obj['完了予定'] || obj['due_date'] || obj['due'] || '',
+    'start_date': obj['開始希望'] || obj['開始日'] || obj['start_date'] || '',
+    'note': obj['備考'] || obj['note'] || ''
+  };
+  openForm("生産計画 編集", PLAN_FIELDS, "savePlan", async ()=>{ await loadPlans(); await loadOrders(); }, initial);
+}
+
+async function loadPlans(){
+  const dat = await cached("listPlans");
+  renderPlansSlim(dat);
+}
+
 $("#btnPlanCreate").onclick = ()=> openForm("生産計画 作成", PLAN_FIELDS, "savePlan", ()=> { loadPlans(); loadOrders(); });
 $("#btnPlanExport").onclick = ()=> exportTableCSV("#tbPlan","plans.csv");
 $("#btnPlanImport").onclick = ()=> importCSVtoSheet("bulkImportPlans", ()=> { loadPlans(); loadOrders(); });
-$("#btnPlanPrint").onclick = ()=> window.print();
+$("#btnPlanPrint").onclick  = ()=> window.print();
+
+/* NEW: download 雛形CSV (header full Jepang) */
+$("#btnPlanTpl")?.addEventListener('click', ()=>{
+  const headers = ['注番','得意先','品番','製造番号','品名','図番','数量','納期希望','開始希望','備考'];
+  const csv = headers.map(h=>`"${h}"`).join(',') + '\n';
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'production_plans_template.csv';
+  a.click();
+});
+
 
 /* ---------- 出荷予定 ---------- */
 const SHIP_FIELDS = [
