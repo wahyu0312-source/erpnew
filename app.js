@@ -839,7 +839,8 @@ const FIN_VIEW = [
 ];
 async function loadFinished(){
   const dat = await cached("listFinished", {}, 5000);
-  const th = $("#thFin"), tb = $("#tbFin"), search = $("#finSearch"]);
+  const th = $("#thFin"), tb = $("#tbFin"), search = $("#finSearch");
+
 
   const head = dat.header||[];
   const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
