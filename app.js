@@ -1279,23 +1279,39 @@ document.addEventListener("DOMContentLoaded", ()=> setUser(null));
 /* ---------- Print 出荷予定 ---------- */
 async function printShipByCustomer(cust, ymd){
   const dat = await cached("listShip", {}, 5000);
-  const head = dat.header||[]; const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
-  const rowsAll = (dat.rows||[]).filter(r => String(r[idx['得意先']]||r[idx['customer']]||'') === cust);
-  const dkey = (v)=>{ const d=(v instanceof Date)?v:new Date(v); return isNaN(d)?'(日付未設定)':new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
-  const rows = ymd ? rowsAll.filter(r => dkey(r[idx['scheduled_date']]||r[idx['出荷日']]) === ymd) : rowsAll;
+  const head = dat.header||[];
+  const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
 
-  // --- FIX: tutup forEach dengan benar
+  const rowsAll = (dat.rows||[]).filter(
+    r => String(r[idx['得意先']] || r[idx['customer']] || '') === cust
+  );
+
+  const dkey = (v)=>{
+    const d = (v instanceof Date) ? v : new Date(v);
+    return isNaN(d)
+      ? '(日付未設定)'
+      : new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+  };
+
+  const rows = ymd
+    ? rowsAll.filter(r => dkey(r[idx['scheduled_date']] || r[idx['出荷日']]) === ymd)
+    : rowsAll;
+
+  // group by date  ✅ (tutup forEach dengan benar)
   const groups = {};
-  rows.forEach(r=>{ 
-    const k = dkey(r[idx['scheduled_date']]||r[idx['出荷日']]);
+  rows.forEach(r => {
+    const k = dkey(r[idx['scheduled_date']] || r[idx['出荷日']]);
     if (!groups[k]) groups[k] = [];
     groups[k].push(r);
   });
 
-  const mapDate = (v)=>{ const d=(v instanceof Date)?v:new Date(v); return isNaN(d)?'':d.toLocaleDateString('ja-JP'); };
+  const mapDate = (v)=>{
+    const d = (v instanceof Date) ? v : new Date(v);
+    return isNaN(d) ? '' : d.toLocaleDateString('ja-JP');
+  };
 
   const html = `
-<html><head><meta charset="utf-8"><title>出荷予定 - ${cust}${ymd? ' '+ymd:''}</title>
+<html><head><meta charset="utf-8"><title>出荷予定 - ${cust}${ymd ? ' '+ymd : ''}</title>
 <style>
 body{font-family:system-ui,"Segoe UI",Roboto,Helvetica,Arial;padding:24px;}
 h1{font-size:20px;margin:0 0 6px;}
@@ -1306,7 +1322,7 @@ th{background:#f6f7fb;}
 .right{text-align:right}
 </style></head>
 <body>
-<h1>出荷予定（${cust}${ymd? ' / '+ymd:''}）</h1>
+<h1>出荷予定（${cust}${ymd ? ' / '+ymd : ''}）</h1>
 ${Object.keys(groups).sort().map(k=>{
   const arr = groups[k];
   const total = arr.reduce((s,r)=> s + Number(r[idx['qty']]||r[idx['数量']]||0), 0);
@@ -1332,5 +1348,8 @@ ${Object.keys(groups).sort().map(k=>{
 }).join('')}
 <script>window.print();</script>
 </body></html>`;
-  const w = window.open('about:blank'); w.document.write(html); w.document.close();
+
+  const w = window.open('about:blank');
+  w.document.write(html);
+  w.document.close();
 }
