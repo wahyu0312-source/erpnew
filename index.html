@@ -5,18 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>東京精密発條株式会社システム</title>
   <link rel="icon" href="./assets/tsh.png">
-
-  <!-- Font & Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer">
-
-  <!-- Styles -->
   <link rel="stylesheet" href="./style.css">
-
-  <!-- Libs -->
   <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-
-  <!-- App -->
   <script defer src="./app.js"></script>
 </head>
 <body>
@@ -232,7 +224,73 @@
     </section>
   </main>
 
-  <!-- Dialog: Create / Edit -->
+  <!-- ===== 請求書 ===== -->
+  <main id="pageInvoice" class="container hidden">
+    <section class="card">
+      <header class="row-between">
+        <h3><i class="fa-regular fa-file-lines"></i> 請求書作成</h3>
+        <div class="row gap">
+          <label class="row gap s">得意先
+            <select id="invCustSel"></select>
+          </label>
+          <label class="row gap s">発行日
+            <input id="invIssueDate" type="date">
+          </label>
+          <button id="invRefresh" class="btn ghost"><i class="fa-solid fa-rotate-right"></i> 更新</button>
+          <button id="invSave" class="btn"><i class="fa-solid fa-floppy-disk"></i> 保存</button>
+          <span class="badge">合計: <span id="invTotal">¥ 0</span></span>
+          <button id="invPdf" class="btn ghost"><i class="fa-regular fa-file-pdf"></i> PDF出力</button>
+          <button id="invXlsx" class="btn ghost"><i class="fa-regular fa-file-excel"></i> Excel出力</button>
+        </div>
+      </header>
+
+      <div class="grid" style="grid-template-columns: 1fr 1fr; gap:12px">
+        <!-- 未の候補 (checkbox) -->
+        <div class="card sub">
+          <h4>未（候補）</h4>
+          <div class="table-wrap" style="max-height:48vh">
+            <table class="table s">
+              <thead>
+                <tr>
+                  <th class="center">選択</th><th>注番</th><th>商品名</th><th>品番</th><th>数量</th><th>単価</th><th>金額</th><th>出荷日</th>
+                </tr>
+              </thead>
+              <tbody id="tbInvCand"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- 全て（ステータス色） -->
+        <div class="card sub">
+          <h4>得意先内 全件（ステータス）</h4>
+          <div class="table-wrap" style="max-height:48vh">
+            <table class="table s">
+              <thead>
+                <tr>
+                  <th>注番</th><th>商品名</th><th>品番</th><th>数量</th><th>単価</th><th>金額</th><th>出荷日</th><th>状態</th>
+                </tr>
+              </thead>
+              <tbody id="tbInvAll"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:12px">
+      <header class="row-between">
+        <h3><i class="fa-regular fa-rectangle-list"></i> 請求書一覧</h3>
+      </header>
+      <div class="table-wrap" style="max-height:50vh">
+        <table class="table s">
+          <thead>
+            <tr><th>請求書番号</th><th>得意先</th><th>発行日</th><th>合計</th><th>ファイル名</th><th>作成者</th></tr>
+          </thead>
+          <tbody id="tbInvoiceList"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+<!-- Dialog: Create / Edit -->
   <dialog id="dlgForm" class="paper">
     <div class="body">
       <h3 id="dlgTitle">作成</h3>
