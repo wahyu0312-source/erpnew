@@ -9,6 +9,9 @@
   <link rel="stylesheet" href="./style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script defer src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <!-- Chart.js for analytics -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+
   <script defer src="./app.js"></script>
 </head>
 <body>
@@ -33,6 +36,7 @@
       <button id="btnToInvPage" class="btn ghost hidden"><i class="fa-solid fa-boxes-stacked"></i> 在庫</button>
       <button id="btnToFinPage" class="btn hidden"><i class="fa-regular fa-box-archive"></i> 完成品一覧</button>
       <button id="btnToInvoice" class="btn ghost hidden"><i class="fa-regular fa-file-lines"></i> 請求書</button>
+<button id="btnToCharts" class="btn ghost hidden">分析チャート</button>
 
       <!-- Settings dropdown -->
       <details class="dropdown-inline hidden" id="ddSetting">
@@ -110,6 +114,60 @@
         </section>
       </div>
     </section>
+    <section id="pageCharts" class="hidden">
+  <div class="row-between" style="margin:12px 0 8px">
+    <div class="row gap">
+      <div class="muted s">ビュー</div>
+      <div class="row gap">
+        <button id="chTabCust"  class="btn ghost">顧客別合計</button>
+        <button id="chTabMonth" class="btn ghost">月別トレンド</button>
+        <button id="chTabYear"  class="btn ghost">年別合計</button>
+        <button id="chTabKpi"   class="btn ghost">総出荷KPI</button>
+        <button id="chTabDash"  class="btn ghost">追加アナリティクス</button>
+      </div>
+    </div>
+    <div class="row gap">
+      <label>年
+        <select id="chYear" style="min-width:92px"></select>
+      </label>
+      <label>月
+        <select id="chMonth" style="min-width:88px">
+          <option value="">(すべて)</option>
+          <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+          <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+          <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+      </label>
+      <label>得意先
+        <select id="chCust" style="min-width:220px"><option value="">(すべて)</option></select>
+      </label>
+      <button id="chRefresh" class="btn">更新</button>
+      <button id="chExpPNG" class="btn ghost">PNG出力</button>
+      <button id="chExpXLSX" class="btn ghost">Excel出力</button>
+    </div>
+  </div>
+
+  <!-- コンテナ: タブごとに切替表示 -->
+  <div id="chViewCust"  class="card"><canvas id="cvCust"  height="110"></canvas></div>
+  <div id="chViewMonth" class="card hidden"><canvas id="cvMonth" height="110"></canvas></div>
+  <div id="chViewYear"  class="card hidden"><canvas id="cvYear"  height="110"></canvas></div>
+  <div id="chViewKpi"   class="card hidden" style="padding:16px">
+    <div class="row wrap gap" style="margin-bottom:8px">
+      <div class="kpi" id="kpiTotal"   style="min-width:180px"></div>
+      <div class="kpi" id="kpiOrders"  style="min-width:180px"></div>
+      <div class="kpi" id="kpiAvg"     style="min-width:180px"></div>
+    </div>
+    <canvas id="cvKpi" height="90"></canvas>
+  </div>
+  <div id="chViewDash"  class="grid hidden" style="grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px">
+    <div class="card"><div class="muted s" style="padding:8px">上位顧客（数量）</div><canvas id="cvTopCust" height="110"></canvas></div>
+    <div class="card"><div class="muted s" style="padding:8px">上位品目（数量）</div><canvas id="cvTopItem" height="110"></canvas></div>
+    <div class="card"><div class="muted s" style="padding:8px">月別トレンド（当年）</div><canvas id="cvDashMonth" height="110"></canvas></div>
+    <div class="card"><div class="muted s" style="padding:8px">年別推移</div><canvas id="cvDashYear" height="110"></canvas></div>
+  </div>
+</section>
+
   </main>
 
   <!-- 受注 -->
