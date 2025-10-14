@@ -1,185 +1,156 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>東京精密発條株式会社システム</title>
 
-  <!-- 基本スタイル（例） -->
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
-
+  <!-- 基本スタイル（軽量） -->
   <style>
     :root{
-      --bg:#f6f7fb; --panel:#fff; --ink:#0f172a; --muted:#64748b; --border:#e5e7eb; --accent:#0ea5a8;
-      --radius:14px; --shadow:0 10px 24px rgba(15,23,42,.06);
+      --bg:#f6f7fb; --panel:#fff; --ink:#0f172a; --muted:#6b7280; --border:#e5e7eb;
+      --primary:#0ea5a4; --primary-ink:#fff; --chip:#eef2ff;
+      --radius:14px; --shadow:0 8px 30px rgba(15,23,42,.06);
     }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{margin:0;font-family:system-ui,"Noto Sans JP","Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink)}
-    .hidden{display:none !important}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans JP", "Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
 
-    /* Top bar */
-    header.topbar{position:sticky;top:0;z-index:50;background:#fff;border-bottom:1px solid var(--border)}
-    .topbar-inner{max-width:1200px;margin:0 auto;height:56px;display:flex;align-items:center;padding:0 12px;gap:12px}
-    .brand{display:flex;align-items:center;gap:10px;font-weight:800}
-    .brand .logo{width:20px;height:20px;background:#0ea5a8;border-radius:4px}
-    /* >>> kanan */
-    .top-actions{
-      margin-left:auto;
-      display:flex;
-      gap:.5rem;
-      align-items:center;
-      justify-content:flex-end;
-      flex-wrap:wrap;
+    /* ヘッダー */
+    header{
+      position:sticky; top:0; z-index:40; background:#ffffffd6; backdrop-filter:saturate(130%) blur(10px);
+      border-bottom:1px solid var(--border);
     }
-    #weatherWrap{display:inline-flex;gap:6px;align-items:center;color:#0ea5a8}
+    .h-wrap{max-width:1200px;margin:0 auto;height:56px;display:flex;align-items:center;gap:10px;padding:0 12px}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:800}
+    .grow{flex:1}
+    .top-actions{display:flex;align-items:center;gap:8px}
+    .chip{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 12px;border:1px solid var(--border);border-radius:999px;background:#fff}
+    .chip.primary{background:var(--primary);color:var(--primary-ink);border-color:transparent}
+    .wx{display:flex;align-items:center;gap:8px;color:var(--muted);font-weight:700}
 
-    /* Layout */
-    main{max-width:1200px;margin:16px auto;padding:0 12px;display:grid;gap:14px}
-    .card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px}
+    /* 上部ナビ（右寄せ固定） */
+    .nav{max-width:1200px;margin:8px auto 0;display:flex;justify-content:flex-end;gap:10px;padding:0 12px;flex-wrap:wrap}
+    .nav .btn{
+      height:34px;padding:0 12px;border:1px solid var(--border);border-radius:999px;background:#fff;cursor:pointer
+    }
+    .nav .btn.active{background:var(--chip);}
 
-    .row{display:flex;gap:.5rem;align-items:center}
-    .row-between{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
-    .muted{color:var(--muted)}
-    .s{font-size:12px}
+    /* ページ領域 */
+    main{max-width:1200px;margin:12px auto;padding:0 12px}
+    .card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .section{padding:14px}
 
-    .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 10px}
-    .btn{height:30px;border-radius:9px;border:1px solid var(--border);background:#fff;padding:0 10px;cursor:pointer}
-    .btn.ghost{background:#f8fafc}
-    .btn.primary{background:#0ea5a8;border-color:#0ea5a8;color:#fff}
+    .hidden{display:none !important;}
+    .s{font-size:12px;color:var(--muted)}
 
-    /* Tables */
-    .table-wrap{overflow:auto}
+    /* テーブル（簡易） */
+    .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
     table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;background:#fff}
-    th{background:#f8fafc;font-weight:700}
-    td.center,th.center{text-align:center}
+    th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+    th{background:#fafbff;font-weight:700}
 
-    /* Skeleton */
-    .skeleton{background:linear-gradient(90deg,#f3f4f6 25%,#e5e7eb 37%,#f3f4f6 63%);background-size:400% 100%;animation:s 1.2s ease-in-out infinite}
-    @keyframes s{0%{background-position:100% 0}100%{background-position:0 0}}
-    .table-skeleton{height:220px;border:1px solid #eee;border-radius:12px}
+    /* ダイアログ */
+    dialog{border:0;border-radius:16px;box-shadow:var(--shadow);padding:16px}
+    dialog::backdrop{background:rgba(0,0,0,.2)}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
-    /* Sections */
-    section.view{display:none}
-    section.view.active{display:block}
-
-    /* Login card */
-    .login-card{max-width:440px;margin:8vh auto}
-    .login-card input{width:100%;height:36px;border:1px solid var(--border);border-radius:8px;padding:0 10px}
+    /* フッタースペース */
+    .spacer{height:40px}
   </style>
-
-  <!-- 必要ライブラリ -->
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
 <body>
-
-  <!-- ========== Top bar ========== -->
-  <header id="topBar" class="topbar">
-    <div class="topbar-inner">
-      <div class="brand"><div class="logo"></div> 東京精密発條株式会社システム</div>
-
-      <!-- semua tombol kanan dibungkus di sini -->
-      <nav id="rightNav" class="top-actions">
-        <div id="weatherWrap" class="row s hidden">
-          <i class="fa-solid fa-cloud"></i>
-          <span id="wxTemp">—</span>
-          <span id="wxWind" class="muted s">—</span>
-          <span id="wxPlace" class="muted s">—</span>
-        </div>
-
-        <button id="btnToDash" class="btn ghost hidden">ダッシュボード</button>
-        <button id="btnToSales" class="btn ghost hidden">受注</button>
-        <button id="btnToPlan" class="btn ghost hidden">生産計画</button>
-        <button id="btnToShip" class="btn ghost hidden">出荷予定</button>
-        <button id="btnToFinPage" class="btn ghost hidden">完成品一覧</button>
-        <button id="btnToInvPage" class="btn ghost hidden">在庫</button>
-        <button id="btnToInvoice" class="btn ghost hidden">請求書</button>
-        <button id="btnToAnalytics" class="btn ghost hidden">分析チャート</button>
-
-        <div id="ddSetting" class="hidden">
-          <button id="btnStationQR" class="btn ghost">工程QR</button>
-          <button id="btnLogout" class="btn">ログアウト</button>
-        </div>
-      </nav>
+  <!-- ========= Header ========= -->
+  <header>
+    <div class="h-wrap">
+      <div class="brand">東京精密発條株式会社システム</div>
+      <div class="grow"></div>
+      <div id="weatherWrap" class="wx hidden">
+        <span id="wxTemp">—°C</span><span>/</span>
+        <span id="wxWind">— m/s</span>
+        <span id="wxPlace" class="s">—</span>
+      </div>
+      <div id="userInfo" class="chip s"></div>
+      <button id="btnLogout" class="chip hidden">ログアウト</button>
     </div>
   </header>
 
+  <!-- ========= Top nav (RIGHT aligned) ========= -->
+  <nav class="nav">
+    <button id="btnToDash" class="btn hidden">ダッシュボード</button>
+    <button id="btnToSales" class="btn hidden">受注</button>
+    <button id="btnToPlan" class="btn hidden">生産計画</button>
+    <button id="btnToShip" class="btn hidden">出荷予定</button>
+    <button id="btnToFinPage" class="btn hidden">完成品一覧</button>
+    <button id="btnToInvPage" class="btn hidden">在庫</button>
+    <button id="btnToInvoice" class="btn hidden">請求書</button>
+    <button id="btnToCharts" class="btn hidden">分析チャート</button>
+    <div class="grow"></div>
+    <button id="btnStationQR" class="btn">工程QR</button>
+    <button id="ddSetting" class="btn hidden">設定</button>
+  </nav>
+
+  <!-- ========= Pages ========= -->
   <main>
-    <!-- ========== Auth View ========== -->
-    <section id="authView" class="view active">
-      <div class="card login-card">
-        <h3 style="margin:6px 0 10px"><i class="fa-solid fa-right-to-bracket"></i> ログイン</h3>
-        <div class="row" style="flex-direction:column;gap:10px">
-          <input id="inUser" placeholder="ユーザー名">
-          <input id="inPass" type="password" placeholder="パスワード">
-          <button id="btnLogin" class="btn primary">ログイン</button>
-          <div class="muted s">※ 上部メニューはログイン後に表示されます。</div>
-        </div>
+    <!-- Auth -->
+    <section id="authView" class="card section">
+      <h3>ログイン</h3>
+      <div class="row" style="max-width:520px">
+        <input id="inUser" class="chip" placeholder="ユーザー名" style="flex:1;min-width:180px" />
+        <input id="inPass" class="chip" type="password" placeholder="パスワード" style="flex:1;min-width:180px" />
+        <button id="btnLogin" class="chip primary">ログイン</button>
       </div>
+      <p class="s">※ 上部メニューはログイン後に表示されます。</p>
     </section>
 
-    <!-- ========== Dashboard ========== -->
-    <section id="pageDash" class="view">
-      <div class="row-between">
-        <h3>ダッシュボード</h3>
-        <div class="muted s" id="userInfo"> </div>
-      </div>
-
-      <!-- Skeleton untuk dashboard utama (orders) -->
-      <div id="ordersSkeleton" class="table-skeleton skeleton hidden"></div>
-
-      <div class="card">
-        <div class="toolbar">
-          <input id="searchQ" class="s" placeholder="検索…" style="height:30px;border:1px solid var(--border);border-radius:8px;padding:0 8px">
-          <button id="btnExportOrders" class="btn">Export</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead id="thOrders"><tr>
-              <th>注番</th><th>品名</th><th class="center">品番</th><th class="center">図番</th>
-              <th class="center">状態</th><th class="center">工程</th>
-              <th class="center">更新日</th><th class="center">更新者</th><th class="center">操作</th>
-            </tr></thead>
-            <tbody id="tbOrders"></tbody>
-          </table>
+    <!-- Dash -->
+    <section id="pageDash" class="card section hidden">
+      <div class="row" style="justify-content:space-between;margin-bottom:8px">
+        <div class="row">
+          <input id="searchQ" class="chip" placeholder="検索..." />
+          <button id="btnExportOrders" class="chip">Export</button>
         </div>
       </div>
 
-      <!-- ミニ: 本日出荷/予定 -->
-      <div class="row" style="gap:14px">
-        <div class="card" style="flex:1">
-          <div class="muted s">本日出荷</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>注番</th><th>品名</th><th>品番</th><th>図番</th>
+              <th>状態</th><th>工程/OK/NG</th><th>更新日</th><th>更新者</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="tbOrders"></tbody>
+        </table>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <div class="card section" style="flex:1;min-width:280px">
+          <h4>本日出荷</h4>
           <div id="shipToday" class="s">—</div>
         </div>
-        <div class="card" style="flex:1">
-          <div class="muted s">出荷予定</div>
+        <div class="card section" style="flex:1;min-width:280px">
+          <h4>出荷予定</h4>
           <div id="shipPlan" class="s">—</div>
         </div>
       </div>
     </section>
 
-    <!-- ========== 受注 ========== -->
-    <section id="pageSales" class="view">
-      <div class="row-between">
-        <h3>受注</h3>
-        <div class="toolbar">
-          <input id="salesSearch" placeholder="検索…" style="height:30px;border:1px solid var(--border);border-radius:8px;padding:0 8px">
-          <button id="btnSalesCreate" class="btn">作成</button>
-          <button id="btnSalesImport" class="btn ghost">Import</button>
-          <button id="btnSalesExport" class="btn ghost">Export</button>
-          <button id="btnSalesPrint" class="btn ghost">Print</button>
-          <button id="btnSalesTpl" class="btn ghost">ひな形CSV</button>
+    <!-- Sales -->
+    <section id="pageSales" class="card section hidden">
+      <div class="row" style="justify-content:space-between">
+        <div class="row">
+          <input id="salesSearch" class="chip" placeholder="検索..." />
+          <button id="btnSalesCreate" class="chip">作成</button>
+        </div>
+        <div class="row">
+          <button id="btnSalesImport" class="chip">Import</button>
+          <button id="btnSalesExport" class="chip">Export</button>
+          <button id="btnSalesPrint" class="chip">Print</button>
+          <button id="btnSalesTpl" class="chip">ひな形CSV</button>
         </div>
       </div>
-
-      <div class="table-skeleton skeleton hidden" id="salesSkeleton"></div>
-
-      <div class="card table-wrap">
+      <div class="table-wrap" style="margin-top:10px">
         <table>
           <thead id="thSales"></thead>
           <tbody id="tbSales"></tbody>
@@ -187,23 +158,21 @@
       </div>
     </section>
 
-    <!-- ========== 生産計画 ========== -->
-    <section id="pagePlan" class="view">
-      <div class="row-between">
-        <h3>生産計画</h3>
-        <div class="toolbar">
-          <input id="planSearch" placeholder="検索…" style="height:30px;border:1px solid var(--border);border-radius:8px;padding:0 8px">
-          <button id="btnPlanCreate" class="btn">作成</button>
-          <button id="btnPlanImport" class="btn ghost">Import</button>
-          <button id="btnPlanExport" class="btn ghost">Export</button>
-          <button id="btnPlanPrint"  class="btn ghost">Print</button>
-          <button id="btnPlanTpl"   class="btn ghost">ひな形CSV</button>
+    <!-- Plan -->
+    <section id="pagePlan" class="card section hidden">
+      <div class="row" style="justify-content:space-between">
+        <div class="row">
+          <input id="planSearch" class="chip" placeholder="検索..." />
+          <button id="btnPlanCreate" class="chip">作成</button>
+        </div>
+        <div class="row">
+          <button id="btnPlanImport" class="chip">Import</button>
+          <button id="btnPlanExport" class="chip">Export</button>
+          <button id="btnPlanPrint" class="chip">Print</button>
+          <button id="btnPlanTpl" class="chip">ひな形CSV</button>
         </div>
       </div>
-
-      <div class="table-skeleton skeleton hidden" id="planSkeleton"></div>
-
-      <div class="card table-wrap">
+      <div class="table-wrap" style="margin-top:10px">
         <table>
           <thead id="thPlan"></thead>
           <tbody id="tbPlan"></tbody>
@@ -211,23 +180,21 @@
       </div>
     </section>
 
-    <!-- ========== 出荷予定 ========== -->
-    <section id="pageShip" class="view">
-      <div class="row-between">
-        <h3>出荷予定</h3>
-        <div class="toolbar">
-          <input id="shipSearch" placeholder="検索…" style="height:30px;border:1px solid var(--border);border-radius:8px;padding:0 8px">
-          <button id="btnShipCreate" class="btn">作成</button>
-          <button id="btnShipImport" class="btn ghost">Import</button>
-          <button id="btnShipExport" class="btn ghost">Export</button>
-          <button id="btnShipPrint"  class="btn ghost">Print</button>
-          <button id="btnShipTpl"    class="btn ghost">ひな形CSV</button>
+    <!-- Ship -->
+    <section id="pageShip" class="card section hidden">
+      <div class="row" style="justify-content:space-between">
+        <div class="row">
+          <input id="shipSearch" class="chip" placeholder="検索..." />
+          <button id="btnShipCreate" class="chip">作成</button>
+        </div>
+        <div class="row">
+          <button id="btnShipImport" class="chip">Import</button>
+          <button id="btnShipExport" class="chip">Export</button>
+          <button id="btnShipPrint" class="chip">Print</button>
+          <button id="btnShipTpl" class="chip">ひな形CSV</button>
         </div>
       </div>
-
-      <div class="table-skeleton skeleton hidden" id="shipSkeleton"></div>
-
-      <div class="card table-wrap">
+      <div class="table-wrap" style="margin-top:10px">
         <table>
           <thead id="thShip"></thead>
           <tbody id="tbShip"></tbody>
@@ -235,20 +202,13 @@
       </div>
     </section>
 
-    <!-- ========== 完成品一覧 ========== -->
-    <section id="pageFinished" class="view">
-      <div class="row-between">
-        <h3>完成品一覧</h3>
-        <div class="toolbar">
-          <input id="finSearch" placeholder="検索…" style="height:30px;border:1px solid var(--border);border-radius:8px;padding:0 8px">
-          <button id="btnFinExport" class="btn ghost">Export</button>
-          <button id="btnFinPrint"  class="btn ghost">Print</button>
-        </div>
+    <!-- Finished -->
+    <section id="pageFinished" class="card section hidden">
+      <div class="row" style="justify-content:flex-end">
+        <button id="btnFinExport" class="chip">Export</button>
+        <button id="btnFinPrint" class="chip">Print</button>
       </div>
-
-      <div class="table-skeleton skeleton hidden" id="finSkeleton"></div>
-
-      <div class="card table-wrap">
+      <div class="table-wrap">
         <table>
           <thead id="thFin"></thead>
           <tbody id="tbFin"></tbody>
@@ -256,20 +216,16 @@
       </div>
     </section>
 
-    <!-- ========== 在庫 ========== -->
-    <section id="pageInv" class="view">
-      <div class="row-between">
-        <h3>在庫</h3>
-        <div class="toolbar">
-          <input id="invSearch" placeholder="検索…" style="height:30px;border:1px solid var(--border);border-radius:8px;padding:0 8px">
-          <button id="btnInvExport" class="btn ghost">Export</button>
-          <button id="btnInvPrint"  class="btn ghost">Print</button>
+    <!-- Inventory -->
+    <section id="pageInv" class="card section hidden">
+      <div class="row" style="justify-content:space-between">
+        <input id="invSearch" class="chip" placeholder="検索..." />
+        <div class="row">
+          <button id="btnInvExport" class="chip">Export</button>
+          <button id="btnInvPrint" class="chip">Print</button>
         </div>
       </div>
-
-      <div class="table-skeleton skeleton hidden" id="invSkeleton"></div>
-
-      <div class="card table-wrap">
+      <div class="table-wrap" style="margin-top:10px">
         <table>
           <thead id="thInv"></thead>
           <tbody id="tbInv"></tbody>
@@ -277,104 +233,144 @@
       </div>
     </section>
 
-    <!-- ========== 請求書（プレースホルダ） ========== -->
-    <section id="pageInvoice" class="view">
-      <div class="row-between">
-        <h3>請求書</h3>
-        <div class="toolbar">
-          <button id="btnInvoiceCreate" class="btn">請求書作成</button>
-          <button id="btnInvoiceExport" class="btn ghost">Excel出力</button>
-          <button id="btnInvoicePdf" class="btn ghost">PDF出力</button>
+    <!-- 請求書 -->
+    <section id="pageInvoice" class="card section hidden">
+      <div class="row" style="justify-content:space-between">
+        <div class="row">
+          <select id="invCustSel" class="chip"><option value="">（得意先を選択）</option></select>
+          <input id="invIssueDate" type="date" class="chip" />
+        </div>
+        <div class="row">
+          <button id="invRefresh" class="chip">更新</button>
+          <button id="invSave" class="chip primary">保存</button>
+          <button id="invPdf" class="chip">PDF出力</button>
+          <button id="invExcel" class="chip">Excel出力</button>
         </div>
       </div>
 
-      <div class="card table-wrap">
+      <div class="row" style="margin-top:8px">
+        <div class="card section" style="flex:1 1 420px">
+          <h4>未（候補）</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>選択</th><th>注番</th><th>商品名</th><th>品番</th><th>数量</th><th>単価</th><th>金額</th><th>出荷日</th></tr>
+              </thead>
+              <tbody id="tbInvCandidates"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card section" style="flex:1 1 420px">
+          <h4>得意先内 全件（ステータス）</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>注番</th><th>商品名</th><th>品番</th><th>数量</th><th>単価</th><th>金額</th><th>出荷日</th><th>状態</th></tr>
+              </thead>
+              <tbody id="tbInvStatus"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <h4 style="margin-top:14px">請求書一覧</h4>
+      <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>請求書番号</th><th>得意先</th><th>発行日</th><th class="center">合計</th><th>ファイル名</th><th>作成者</th></tr>
+            <tr><th>請求書番号</th><th>得意先</th><th>発行日</th><th>合計</th><th>ファイル名</th><th>作成者</th></tr>
           </thead>
-          <tbody id="tbInvoice"></tbody>
+          <tbody id="tbInvoiceList"></tbody>
         </table>
       </div>
     </section>
 
-    <!-- ========== 分析チャート（プレースホルダ） ========== -->
-    <section id="pageCharts" class="view">
-      <div class="row-between">
-        <h3>分析チャート</h3>
-        <div class="toolbar">
-          <select id="chartYear" class="btn"><option value="">年</option></select>
-          <select id="chartMonth" class="btn"><option value="">月</option></select>
-          <select id="chartCust" class="btn"><option value="">得意先</option></select>
-          <button id="chartExportPng" class="btn ghost">PNG</button>
-          <button id="chartExportXlsx" class="btn ghost">Excel</button>
+    <!-- 分析チャート -->
+    <section id="pageCharts" class="card section hidden">
+      <div class="row" style="justify-content:space-between">
+        <div class="row">
+          <button class="chip" data-range="ytd">年内</button>
+          <button class="chip" data-range="30d">30日</button>
+          <button class="chip" data-range="14d">14日</button>
+          <span class="s">メトリクス:</span>
+          <button class="chip" data-metric="qty">数量</button>
+          <button class="chip" data-metric="count">件数</button>
+        </div>
+        <div class="row">
+          <button id="chExportExcel" class="chip">Excel</button>
+          <button id="chExportPdf" class="chip">PDF</button>
         </div>
       </div>
 
-      <div class="row" style="gap:14px;flex-wrap:wrap">
-        <div class="card" style="flex:1;min-width:420px">
-          <div class="muted s">出荷（日次）</div>
-          <canvas id="cDaily"></canvas>
+      <div class="row" style="margin-top:10px;gap:12px;flex-wrap:wrap">
+        <div class="card section" style="flex:1 1 480px;min-width:320px">
+          <h4>出荷（日次）</h4>
+          <canvas id="chDaily" height="240"></canvas>
         </div>
-        <div class="card" style="flex:1;min-width:420px">
-          <div class="muted s">出荷（月次・YTD）</div>
-          <canvas id="cMonthly"></canvas>
+        <div class="card section" style="flex:1 1 480px;min-width:320px">
+          <h4>出荷（月次・YTD）</h4>
+          <canvas id="chMonthly" height="240"></canvas>
         </div>
-        <div class="card" style="flex:1;min-width:420px">
-          <div class="muted s">顧客別（Top）</div>
-          <canvas id="cCustTop"></canvas>
+        <div class="card section" style="flex:1 1 480px;min-width:320px">
+          <h4>顧客別 出荷（Top）</h4>
+          <canvas id="chCustTop" height="300"></canvas>
         </div>
-        <div class="card" style="flex:1;min-width:420px">
-          <div class="muted s">顧客別 月次</div>
-          <canvas id="cCustMonthly"></canvas>
+        <div class="card section" style="flex:1 1 480px;min-width:320px">
+          <h4>顧客別 月次 出荷</h4>
+          <canvas id="chCustMonthly" height="300"></canvas>
         </div>
       </div>
     </section>
 
+    <div class="spacer"></div>
   </main>
 
-  <!-- ========== Dialog: 手入力 (OP) ========== -->
-  <dialog id="dlgOp" class="card" style="max-width:520px">
-    <h3 style="margin:0 0 8px">手入力 <span id="opPO" class="s muted"></span></h3>
-    <div class="row" style="gap:10px;flex-wrap:wrap">
-      <select id="opProcess" class="btn" style="min-width:220px"></select>
-      <input id="opOK"  type="number" min="0" class="btn" placeholder="OK 数">
-      <input id="opNG"  type="number" min="0" class="btn" placeholder="NG 数">
-      <input id="opNote" class="btn" placeholder="備考" style="flex:1">
+  <!-- ========= 共通ダイアログ ========= -->
+  <!-- 操作（手入力） -->
+  <dialog id="dlgOp" class="dlg">
+    <h3 id="opPO">PO</h3>
+    <div class="row">
+      <select id="opProcess" class="chip"></select>
+      <input id="opOK" class="chip" type="number" min="0" placeholder="OK" style="width:120px" />
+      <input id="opNG" class="chip" type="number" min="0" placeholder="NG" style="width:120px" />
+      <input id="opNote" class="chip" placeholder="備考" style="flex:1" />
     </div>
     <div class="row" style="justify-content:flex-end;margin-top:10px">
-      <button id="btnOpSave" class="btn primary">保存</button>
-      <button id="btnOpCancel" class="btn">キャンセル</button>
+      <button id="btnOpCancel" class="chip">キャンセル</button>
+      <button id="btnOpSave" class="chip primary">保存</button>
     </div>
   </dialog>
 
-  <!-- ========== Dialog: 共通フォーム ========== -->
-  <dialog id="dlgForm" class="card" style="max-width:640px">
-    <h3 id="dlgTitle" style="margin:0 0 8px">フォーム</h3>
-    <form id="formBody"></form>
+  <!-- スキャン -->
+  <dialog id="dlgScan" class="dlg">
+    <h3 id="scanResult" class="s">—</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <video id="scanVideo" style="width:100%;border:1px solid var(--border);border-radius:10px"></video>
+      <canvas id="scanCanvas" style="width:100%;border:1px solid var(--border);border-radius:10px"></canvas>
+    </div>
     <div class="row" style="justify-content:flex-end;margin-top:10px">
-      <button id="btnDlgSave" class="btn primary">保存</button>
-      <button id="btnDlgCancel" class="btn">キャンセル</button>
+      <button id="btnScanStart" class="chip primary">開始</button>
+      <button id="btnScanClose" class="chip">閉じる</button>
     </div>
   </dialog>
 
-  <!-- ========== Dialog: QR スキャン ========== -->
-  <dialog id="dlgScan" class="card" style="max-width:720px">
-    <h3 style="margin:0 0 6px">QR スキャン</h3>
-    <div class="row" style="gap:10px;align-items:flex-start;flex-wrap:wrap">
-      <video id="scanVideo" style="width:320px;height:240px;background:#000;border-radius:8px" playsinline></video>
-      <canvas id="scanCanvas" width="320" height="240" class="hidden"></canvas>
-      <div style="min-width:240px">
-        <div id="scanResult" class="s muted">—</div>
-        <div class="row" style="margin-top:10px">
-          <button id="btnScanStart" class="btn primary">開始</button>
-          <button id="btnScanClose" class="btn">閉じる</button>
-        </div>
-      </div>
+  <!-- フォーム（受注/計画/出荷） -->
+  <dialog id="dlgForm" class="dlg" style="max-width:680px">
+    <h3 id="dlgTitle">編集</h3>
+    <form id="formBody" method="dialog"></form>
+    <div class="row" style="justify-content:flex-end;margin-top:10px">
+      <button id="btnDlgCancel" class="chip">キャンセル</button>
+      <button id="btnDlgSave" class="chip primary">保存</button>
     </div>
   </dialog>
 
-  <!-- ======= App script ======= -->
-  <script defer src="./app.js"></script>
+  <!-- ========= ライブラリ ========= -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
+  <!-- ========= アプリ本体 ========= -->
+  <script src="./app.js"></script>
 </body>
 </html>
