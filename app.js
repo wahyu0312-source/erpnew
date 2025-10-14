@@ -54,9 +54,10 @@ function jsonp(action, params={}){
     const s = document.createElement("script");
     s.src = `${API_BASE}?${qs(params)}`;
 
+    // ↓ 9 detik saja biar nggak nahan UI lama
     let timeout = setTimeout(()=>{
       cleanup(); reject(new Error("API timeout"));
-    }, 20000);
+    }, 9000);
 
     function cleanup(){
       try{ delete window[cb]; s.remove(); }catch(_){}
@@ -71,6 +72,7 @@ function jsonp(action, params={}){
     document.body.appendChild(s);
   });
 }
+
 const apiCache = new Map();
 async function cached(action, params={}, ttlMs=15000){
   const key = action + ":" + JSON.stringify(params||{});
@@ -172,13 +174,14 @@ async function loginSubmit(){
   const p = $("#inPass").value.trim();
   if(!u || !p) return alert("ユーザー名 / パスワード を入力してください");
   try{
-    await jsonp('ping');
+    // await jsonp('ping'); ← HAPUS baris ini
     const me = await jsonp("login", { username:u, password:p });
     setUser(me);
   }catch(e){
     alert("ログイン失敗: " + (e?.message || e));
   }
 }
+
 
 /* ---------------- Dashboard: Orders ---------------- */
 let ORDERS = [];
@@ -1018,6 +1021,32 @@ function renderWeather(v){
   $("#wxWind").textContent = Math.round(v.current.wind_speed_10m) + " m/s";
   $("#wxPlace").textContent = v.timezone_abbreviation || "";
 }
+/* ---------- rIC fallback (cepat, aman) ---------- */
+// Letakkan di paling atas app.js (setelah helper, sebelum render tabel apa pun)
+(function () {
+  // fallback sederhana: jalankan segera dengan setTimeout(0)
+  const fallback = (cb) => setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 0 }), 0);
+
+  if (!('requestIdleCallback' in window)) {
+    window.requestIdleCallback = fallback;
+    window.cancelIdleCallback = (id) => clearTimeout(id);
+    return;
+  }
+
+  // (Opsional) Bungkus rIC asli dengan timeout guard agar tidak “nunggu lama”
+  const origRIC = window.requestIdleCallback;
+  const origCancel = window.cancelIdleCallback || ((id) => clearTimeout(id));
+  window.requestIdleCallback = function (cb, opts) {
+    const cap = (opts && opts.timeout) || 200; // maksimal nunggu 200ms
+    const t = setTimeout(() => cb({ didTimeout: true, timeRemaining: () => 0 }), cap);
+    const id = origRIC((deadline) => { clearTimeout(t); cb(deadline); }, opts);
+    // kembalikan id kompatibel untuk cancel
+    return { __rid: id, __tid: t };
+  };
+  window.cancelIdleCallback = function (idObj) {
+    try { clearTimeout(idObj?.__tid); origCancel(idObj?.__rid); } catch (_) {}
+  };
+})();
 
 /* ---------------- Utils ---------------- */
 function debounce(fn, wait){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); }; }
@@ -1239,6 +1268,26 @@ async function getShipRowsForChart(){
     date: r[idx['delivery_date']]||r[idx['納入日']]||r[idx['出荷日']]||''
   }));
 }
+async function loadScript(src){
+  return new Promise((res, rej)=>{
+    const s = document.createElement('script');
+    s.src = src; s.async = true; s.defer = true;
+    s.onload = ()=> res();
+    s.onerror = ()=> rej(new Error('failed to load ' + src));
+    document.head.appendChild(s);
+  });
+}
+async function ensureChartLibs(){
+  // Chart.js
+  if(typeof window.Chart === 'undefined'){
+    await loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js');
+  }
+  // DataLabels plugin
+  if(typeof window.ChartDataLabels === 'undefined'){
+    await loadScript('https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js');
+  }
+}
+
 async function renderCharts(){
   destroyCharts();
   const rows = await getShipRowsForChart();
@@ -1330,4 +1379,13 @@ function exportChartDataXLSX(){
   const ws = XLSX.utils.aoa_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, ws, "顧客別");
   XLSX.writeFile(wb, "chart_data.xlsx");
+  (function checkChartCanvases(){
+  const need = ['cvCust','cvMonth','cvYear','cvKpi','cvTopCust','cvTopItem','cvDashMonth','cvDashYear'];
+  const missing = need.filter(id => !document.getElementById(id));
+  if(missing.length){
+    console.warn('Canvas chart tidak ditemukan:', missing);
+  }
+})();
+
 }
+
