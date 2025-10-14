@@ -51,6 +51,12 @@
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
     @media (max-width:900px){ .grid2{grid-template-columns:1fr} }
   </style>
+<style>
+  /* pastikan bar tombol kanan tetap nempel di sisi kanan */
+  .top-actions{ margin-left:auto; display:flex; gap:.5rem; align-items:center; justify-content:flex-end }
+  /* jaga agar badge cuaca juga ikut ke kanan */
+  #weatherWrap{ margin-left:.5rem }
+</style>
 
   <!-- Lib untuk features yang dipakai app.js -->
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
