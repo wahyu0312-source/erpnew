@@ -130,4 +130,13 @@ background:#fff; cursor:pointer;
 @media (max-width: 980px){
 .btn.icon span{ display:none; } /* ikon-only */
 }
+/* ... semua style lama tetap ... */
+
+/* Pill status untuk 請求書 */
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-weight:700;font-size:12px;border:1px solid}
+.pill-green{color:#166534;background:#ecfdf5;border-color:#a7f3d0}
+.pill-red{color:#991b1b;background:#fef2f2;border-color:#fecaca}
+
+/* Right align helper */
+.right{text-align:right}
 
