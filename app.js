@@ -667,10 +667,13 @@ function renderShipSlim(dat){
   tb.innerHTML = '';
   if(SHIP_UI.groupByDate){
     const groups = {};
-    rows.forEach(r=>{
-      const key = dstr(r[idx['scheduled_date']] ?? r[idx['出荷日']] ?? '');
-      groups[key||'(日付未設定)'] ??= []; groups[key||'(日付未設定)'].push(r);
-    });
+rows.forEach(r=>{
+  const keyRaw = dstr(r[idx['scheduled_date']] ?? r[idx['出荷日']] ?? '');
+  const key = keyRaw || '(日付未設定)';
+  if(!groups[key]) groups[key] = [];
+  groups[key].push(r);
+});
+
     Object.keys(groups).sort().forEach(dateKey=>{
       const arr = groups[dateKey];
       const total = arr.reduce((s,r)=> s + Number(r[idx['qty']]||r[idx['数量']]||0), 0);
