@@ -668,11 +668,11 @@ function renderShipSlim(dat){
   if(SHIP_UI.groupByDate){
     const groups = {};
 rows.forEach(r=>{
-  const keyRaw = dstr(r[idx['scheduled_date']] ?? r[idx['出荷日']] ?? '');
-  const key = keyRaw || '(日付未設定)';
-  if(!groups[key]) groups[key] = [];
-  groups[key].push(r);
+  const k = dkey(r[idx['scheduled_date']]||r[idx['出荷日']]);
+  if(!groups[k]) groups[k] = [];
+  groups[k].push(r);
 });
+
 
     Object.keys(groups).sort().forEach(dateKey=>{
       const arr = groups[dateKey];
