@@ -1,10 +1,6 @@
 /* =================================================
-JSONP Frontend (Optimized, with Inventory + Station QR universal)
-- Dashboard status merge StatusLog
-- CRUD: 受注 / 生産計画 / 出荷予定 / 完成品一覧 / 在庫(表示)
-- 操作: QR 工程(Station, universal) + 手入力 (OK/NG/工程)
-- Import / Export / Print
-- Cuaca (Open-Meteo, cached)
+  JSONP Frontend (…dipersingkat…)
+  + NEW: 請求書（Invoice）
 ================================================= */
 
 const API_BASE = "https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec";
@@ -1334,3 +1330,274 @@ ${Object.keys(groups).sort().map(k=>{
 </body></html>`;
   const w = window.open('about:blank'); w.document.write(html); w.document.close();
 }
+
+/** ====== NAV: tambah tombol 請求書 ====== */
+function setUser(u){
+  CURRENT_USER = u || null;
+  $("#userInfo").textContent = u ? `${u.role} / ${u.department}` : "";
+
+  const pages = ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageInv","pageInvoice"]; // NEW add pageInvoice
+  pages.forEach(p => $("#"+p)?.classList.add("hidden"));
+
+  ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToFinPage','btnToInvPage','btnToInvoice','ddSetting','weatherWrap']
+  .forEach(id=> $("#"+id)?.classList.add("hidden"));
+
+  if(!u){ $("#authView")?.classList.remove("hidden"); return; }
+
+  const ROLE_MAP = {
+    'admin':        { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished','pageInv','pageInvoice'], nav:true },
+    '営業':         { pages:['pageSales','pageDash','pageFinished','pageInv','pageInvoice'], nav:true },
+    '生産管理':     { pages:['pagePlan','pageShip','pageDash','pageFinished','pageInv','pageInvoice'], nav:true },
+    '生産管理部':   { pages:['pagePlan','pageShip','pageDash','pageFinished','pageInv','pageInvoice'], nav:true },
+    '製造':         { pages:['pageDash','pageFinished','pageInv'], nav:true },
+    '検査':         { pages:['pageDash','pageFinished','pageInv'], nav:true }
+  };
+
+  const allow = ROLE_MAP[u.role] || ROLE_MAP[u.department] || ROLE_MAP['admin'];
+  if(allow?.nav){
+    if(allow.pages.includes('pageDash')) $("#btnToDash").classList.remove("hidden");
+    if(allow.pages.includes('pageSales')) $("#btnToSales").classList.remove("hidden");
+    if(allow.pages.includes('pagePlan')) $("#btnToPlan").classList.remove("hidden");
+    if(allow.pages.includes('pageShip')) $("#btnToShip").classList.remove("hidden");
+    if(allow.pages.includes('pageFinished')) $("#btnToFinPage").classList.remove("hidden");
+    if(allow.pages.includes('pageInv')) $("#btnToInvPage").classList.remove("hidden");
+    if(allow.pages.includes('pageInvoice')) $("#btnToInvoice").classList.remove("hidden"); // NEW
+    $("#ddSetting").classList.remove("hidden");
+    $("#weatherWrap").classList.remove("hidden");
+    ensureWeather();
+    loadMasters();
+  }
+  show("pageDash");
+  refreshAll();
+}
+
+/* NAV button */
+$("#btnToInvoice").onclick = ()=>{ show("pageInvoice"); initInvoicePage(); };
+
+/* ===== 請求書: UI state ===== */
+const INVX = {
+  customer: '',
+  allRows: [],      // semua (dengan status)
+  pending: [],      // hanya 未
+  selected: new Set(),
+  lastInvoice: null // {invoice_id, customer, issue_date, items, total}
+};
+
+/* ===== 請求書: helpers ===== */
+function money(n){ n = Number(n||0); return n.toLocaleString('ja-JP'); }
+function ymd(d=new Date()){ const x=new Date(d); const z = new Date(x.getTime()-x.getTimezoneOffset()*60000); return z.toISOString().slice(0,10); }
+
+/* ===== 請求書: init page ===== */
+async function initInvoicePage(){
+  // Dropdown master customer
+  const sel = $("#invCustSel");
+  sel.innerHTML = `<option value="">(得意先を選択)</option>` + (MASTERS.customers||[]).map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.onchange = async ()=>{ INVX.customer = sel.value; INVX.selected.clear(); await reloadInvoiceCandidates(); };
+  $("#invIssueDate").value = ymd(new Date());
+  $("#invRefresh").onclick = reloadInvoiceCandidates;
+  $("#invSave").onclick = saveInvoice;
+  $("#invPdf").onclick = exportInvoicePDF;
+  $("#invXlsx").onclick = exportInvoiceExcel;
+
+  await loadInvoiceList();
+  // kalau ada default customer, muat kandidat
+}
+
+async function loadInvoiceList(){
+  try{
+    const list = await cached('listInvoices', {}, 8000);
+    renderInvoiceList(list);
+  }catch(_){}
+}
+function renderInvoiceList(list){
+  const tb = $("#tbInvoiceList");
+  tb.innerHTML = '';
+  (list||[]).forEach(o=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${o.invoice_id||''}</td>
+      <td>${o.customer||''}</td>
+      <td>${o.issue_date? new Date(o.issue_date).toLocaleDateString('ja-JP') : ''}</td>
+      <td class="right">¥ ${money(o.total||0)}</td>
+      <td>${o.filename||''}</td>
+      <td>${o.created_by||''}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function invStatusChip(s){
+  if(/済/.test(s)) return `<span class="pill pill-green">請求書済</span>`;
+  return `<span class="pill pill-red">請求書（未）</span>`;
+}
+
+async function reloadInvoiceCandidates(){
+  if(!INVX.customer){ $("#tbInvCand").innerHTML=''; $("#tbInvAll").innerHTML=''; return; }
+  const data = await jsonp('invoiceCandidates', { customer: INVX.customer });
+  INVX.pending = data.pending||[];
+  INVX.allRows = data.all||[];
+  renderInvoiceCandidates();
+  renderInvoiceAll();
+}
+
+function renderInvoiceCandidates(){
+  const tb = $("#tbInvCand"); tb.innerHTML = '';
+  INVX.pending.forEach(r=>{
+    const id = r.ship_id ? r.ship_id : `${r.po_id}|${r.品番}|${r.数量}`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="center"><input type="checkbox" data-id="${id}"></td>
+      <td>${r.po_id||''}</td>
+      <td>${r.商品名||''}</td>
+      <td>${r.品番||''}</td>
+      <td class="right">${r.数量||0}</td>
+      <td class="right">¥ ${money(r.単価||0)}</td>
+      <td class="right"><b>¥ ${money(r.金額||0)}</b></td>
+      <td>${r.出荷日||''}</td>`;
+    tb.appendChild(tr);
+  });
+  $$("#tbInvCand input[type=checkbox]").forEach(ch=>{
+    ch.onchange = (e)=>{ const key = e.currentTarget.dataset.id; if(e.currentTarget.checked) INVX.selected.add(key); else INVX.selected.delete(key); };
+  });
+  calcInvoicePreviewTotal();
+}
+function renderInvoiceAll(){
+  const tb = $("#tbInvAll"); tb.innerHTML = '';
+  INVX.allRows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.po_id||''}</td>
+      <td>${r.商品名||''}</td>
+      <td>${r.品番||''}</td>
+      <td class="right">${r.数量||0}</td>
+      <td class="right">¥ ${money(r.単価||0)}</td>
+      <td class="right">¥ ${money(r.金額||0)}</td>
+      <td>${r.出荷日||''}</td>
+      <td class="center">${invStatusChip(r.請求書状態||'')}</td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function calcInvoicePreviewTotal(){
+  // tampilkan ringkasan total yang terpilih
+  const rows = selectedInvoiceItems();
+  const total = rows.reduce((s,r)=> s + Number(r.金額||0), 0);
+  $("#invTotal").textContent = `¥ ${money(total)}`;
+}
+
+function selectedInvoiceItems(){
+  const set = INVX.selected;
+  const arr = INVX.pending.filter(r=>{
+    const id = r.ship_id ? r.ship_id : `${r.po_id}|${r.品番}|${r.数量}`;
+    return set.has(id);
+  });
+  return arr;
+}
+
+/* ===== Simpan Invoice ===== */
+async function saveInvoice(){
+  if(!INVX.customer) return alert('得意先を選択してください');
+  const items = selectedInvoiceItems();
+  if(!items.length) return alert('明細を選択してください');
+  if(!confirm(`請求書を作成しますか？\n得意先：${INVX.customer}\n明細数：${items.length}`)) return;
+  try{
+    const issue_date = $("#invIssueDate").value || ymd(new Date());
+    const payload = { customer: INVX.customer, issue_date, items };
+    const res = await jsonp('createInvoice', { data: JSON.stringify(payload), user: JSON.stringify(CURRENT_USER||{}) });
+    INVX.lastInvoice = res;
+    alert(`請求書を作成しました: ${res.invoice_id}`);
+    INVX.selected.clear();
+    await reloadInvoiceCandidates();
+    await loadInvoiceList();
+  }catch(e){
+    alert('作成失敗: ' + (e?.message || e));
+  }
+}
+
+/* ===== Export PDF ===== */
+function exportInvoicePDF(){
+  const inv = INVX.lastInvoice;
+  if(!inv) return alert('まず請求書を作成してください');
+  const title = `請求書 - ${inv.customer} - ${ymd(inv.issue_date)}`;
+  const logoUrl = './assets/tsh.png';
+  const rows = inv.items||[];
+  const total = inv.total||0;
+
+  const html = `
+<html><head><meta charset="utf-8"><title>${title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  @page{ size:A4; margin:14mm }
+  body{ font-family:"Noto Sans JP", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; color:#0f172a; }
+  header{ display:flex; align-items:center; justify-content:space-between; }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand img{ width:48px; height:48px; border-radius:8px }
+  h1{ margin:0 0 6px; }
+  .muted{ color:#64748b }
+  .row{ display:flex; gap:12px; }
+  .mt8{ margin-top:8px } .mt12{ margin-top:12px } .mt16{ margin-top:16px }
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  th,td{ border:1px solid #e5e7eb; padding:6px 8px; text-align:left; white-space:nowrap }
+  th{ background:#f8fafc }
+  td.right, th.right{ text-align:right }
+  footer{ margin-top:16px; font-size:12px; color:#64748b }
+</style></head>
+<body>
+<header>
+  <div class="brand"><img src="${logoUrl}"><div><h1>請求書</h1><div class="muted">Invoice ID: ${inv.invoice_id}</div></div></div>
+  <div>
+    <div>発行日：${new Date(inv.issue_date).toLocaleDateString('ja-JP')}</div>
+    <div>得意先：<b>${inv.customer}</b></div>
+  </div>
+</header>
+
+<section class="mt16">
+  <table>
+    <tr>
+      <th>注番</th><th>商品名</th><th>品番</th><th class="right">数量</th><th class="right">単価</th><th class="right">金額</th><th>出荷日</th>
+    </tr>
+    ${rows.map(r=>`
+      <tr>
+        <td>${r.po_id||''}</td>
+        <td>${r.商品名||''}</td>
+        <td>${r.品番||''}</td>
+        <td class="right">${r.数量||0}</td>
+        <td class="right">¥ ${money(r.単価||0)}</td>
+        <td class="right"><b>¥ ${money(r.金額||0)}</b></td>
+        <td>${r.出荷日||''}</td>
+      </tr>`).join('')}
+    <tr>
+      <th colspan="5" class="right">合計</th>
+      <th class="right">¥ ${money(total)}</th>
+      <th></th>
+    </tr>
+  </table>
+</section>
+
+<footer>※ 自動発行（システム）</footer>
+<script>window.print()</script>
+</body></html>`;
+  const w = window.open('about:blank'); w.document.write(html); w.document.close();
+}
+
+/* ===== Export Excel ===== */
+function exportInvoiceExcel(){
+  const inv = INVX.lastInvoice;
+  if(!inv) return alert('まず請求書を作成してください');
+  const rows = inv.items||[];
+  const header = ['注番','商品名','品番','数量','単価','金額','出荷日'];
+  const data = [header].concat(rows.map(r=>[
+    r.po_id||'', r.商品名||'', r.品番||'', Number(r.数量||0), Number(r.単価||0), Number(r.金額||0), r.出荷日||''
+  ])).concat([['','','','', '合計', Number(inv.total||0), '']]);
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '請求書');
+  const fname = `請求書_${inv.customer}_${ymd(inv.issue_date).replaceAll('-','')}.xlsx`;
+  XLSX.writeFile(wb, fname);
+}
+
+/* Hitung ulang total saat checkbox berubah (sudah dipanggil di render) */
+$("#invCandRecalc")?.addEventListener('click', calcInvoicePreviewTotal);
+
+/* ====== INIT ====== */
+document.addEventListener("DOMContentLoaded", ()=> setUser(null));
