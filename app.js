@@ -557,7 +557,7 @@ async function ensureSalesIndex(){
 
 let CURRENT_SHIP_CUST = '';
 const SHIP_FIELDS = [
-  {name:'po_id',       label:'注番',      type:'select', options:()=>{  // berdasar customer terpilih
+  {name:'po_id',       label:'注番',      type:'select', options:()=>{  // berdasarkan customer terpilih
       const s = SALES_INDEX.byCustomer.get(CURRENT_SHIP_CUST);
       return s ? [...s].sort() : (MASTERS.po_ids||[]);
     }, free:true, req:true},
@@ -666,13 +666,14 @@ function renderShipSlim(dat){
 
   tb.innerHTML = '';
   if(SHIP_UI.groupByDate){
+    // --- FIX: gunakan dstr() dan tutup blok dengan benar ---
     const groups = {};
-rows.forEach(r=>{
-  const k = dkey(r[idx['scheduled_date']]||r[idx['出荷日']]);
-  if(!groups[k]) groups[k] = [];
-  groups[k].push(r);
-});
-
+    rows.forEach(r=>{
+      const key = dstr(r[idx['scheduled_date']] ?? r[idx['出荷日']] ?? '');
+      const k = key || '(日付未設定)';
+      if(!groups[k]) groups[k] = [];
+      groups[k].push(r);
+    });
 
     Object.keys(groups).sort().forEach(dateKey=>{
       const arr = groups[dateKey];
@@ -1283,8 +1284,13 @@ async function printShipByCustomer(cust, ymd){
   const dkey = (v)=>{ const d=(v instanceof Date)?v:new Date(v); return isNaN(d)?'(日付未設定)':new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
   const rows = ymd ? rowsAll.filter(r => dkey(r[idx['scheduled_date']]||r[idx['出荷日']]) === ymd) : rowsAll;
 
-  const groups = {}; rows.forEach(r=>{ const k = dkey(r[idx['scheduled_date']]||r[idx['出荷日']]); if (!groups[k]) groups[k] = [];
-groups[k].push(r);
+  // --- FIX: tutup forEach dengan benar
+  const groups = {};
+  rows.forEach(r=>{ 
+    const k = dkey(r[idx['scheduled_date']]||r[idx['出荷日']]);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(r);
+  });
 
   const mapDate = (v)=>{ const d=(v instanceof Date)?v:new Date(v); return isNaN(d)?'':d.toLocaleDateString('ja-JP'); };
 
