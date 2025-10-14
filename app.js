@@ -812,6 +812,7 @@ async function loadShipsMini(){
 }
 
 /* ---------- 完成品一覧 ---------- */
+/* ---------- 完成品一覧 ---------- */
 const FIN_VIEW = [
   {label:'注番', keys:['po_id','注番']},
   {label:'得意先', keys:['得意先','customer']},
@@ -824,43 +825,61 @@ const FIN_VIEW = [
   {label:'完了日', keys:['completed_at']},
   {label:'更新者', keys:['updated_by']},
 ];
+
 async function loadFinished(){
   const dat = await cached("listFinished", {}, 5000);
   const th = $("#thFin"), tb = $("#tbFin"), search = $("#finSearch");
 
-  const head = dat.header||[];
-  const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
-  const pick = (row, keys)=>{ for(const k of keys){ const i=idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
+  const head = dat.header || [];
+  const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
+  const pick = (row, keys)=>{
+    for(const k of keys){
+      const i = idx[k];
+      if(i!=null && row[i]!=null && row[i] !== '') return row[i];
+    }
+    return '';
+  };
 
-  th.innerHTML = `<tr>${FIN_VIEW.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
+  th.innerHTML = '<tr>' + FIN_VIEW.map(c=>'<th>'+c.label+'</th>').join('') + '</tr>';
 
   const render = ()=>{
-    const q = (search?.value||'').toLowerCase();
+    const q = (search ? (search.value||'').toLowerCase() : '');
     tb.innerHTML = '';
-    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-    let i=0; const chunk=150;
+    const rows = (dat.rows||[]).filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+
+    let i = 0; const chunk = 150;
     function paint(){
-      const end=Math.min(i+chunk, rows.length);
-      const frag=document.createDocumentFragment();
-      for(;i<end;i++){
+      const end  = Math.min(i+chunk, rows.length);
+      const frag = document.createDocumentFragment();
+
+      for(; i<end; i++){
         const r = rows[i];
-        const tds = FIN_VIEW.map(col=>{
+
+        const tds = FIN_VIEW.map(function(col){
           let v = pick(r, col.keys);
-          if(col.label==='完了日' && v){
-            const d=(v instanceof Date)?v:new Date(v); if(!isNaN(d)) v = d.toLocaleString('ja-JP');
+          if(col.label === '完了日' && v){
+            const d = (v instanceof Date) ? v : new Date(v);
+            if(!isNaN(d)) v = d.toLocaleString('ja-JP');
           }
-          return `<td>${v??''}</td>`;
+          return '<td>' + (v==null ? '' : String(v)) + '</td>';
         }).join('');
-        const tr=document.createElement('tr'); tr.innerHTML = tds; frag.appendChild(tr);
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = tds;        // <- perhatikan: tidak ada `${tds}` tanpa backtick
+        frag.appendChild(tr);
       }
+
       tb.appendChild(frag);
-      if(i<rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
+      if(i < rows.length && 'requestIdleCallback' in window) requestIdleCallback(paint);
     }
+
     paint();
   };
+
   if(search) search.oninput = debounce(render, 250);
   render();
 }
+
 $("#btnFinExport")?.addEventListener('click', ()=> exportTableCSV("#tbFin","finished_goods.csv"));
 $("#btnFinPrint")?.addEventListener('click', ()=> window.print());
 
