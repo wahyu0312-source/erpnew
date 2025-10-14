@@ -1270,25 +1270,27 @@ ${Object.keys(groups).sort().map(k=>{
 }
 
 /* =================================================
-               請求書 (Invoice) MODULE
+               請求書 (Invoice) MODULE  — HOTFIX
 ================================================= */
 let INV_STATE = {
   customer: '',
   issue_ymd: fmtYMD(new Date()),
-  shipments: [],     // all shipments for chosen customer (with status)
+  shipments: [],     // all shipments for chosen customer (with status & calc)
   candidates: [],    // 未 items
-  selectedKeys: new Set(), // selected row keys (ship_id or po+date)
-  invoices: []       // saved invoices (from backend)
+  selectedKeys: new Set(), // selected row keys
+  invoices: []       // saved invoices
 };
 
 function invKeyOfRow(r, idx){
-  return String(r[idx['ship_id']] || `${r[idx['po_id']]||r[idx['注番']]}|${fmtYMD(r[idx['delivery_date']]||r[idx['出荷日']]||'')}`);
+  const po = r[idx['po_id']] || r[idx['注番']] || '';
+  const d  = fmtYMD(r[idx['delivery_date']] || r[idx['出荷日']] || '');
+  const sid = r[idx['ship_id']];
+  return String(sid || (po + '|' + (d || '')));
 }
 
 async function invoiceInit(){
-  // init controls
   const sel = $("#invCustSel");
-  sel.innerHTML = `<option value="">(得意先を選択)</option>` + (MASTERS.customers||[]).map(c=>`<option>${c}</option>`).join('');
+  sel.innerHTML = '<option value="">(得意先を選択)</option>' + (MASTERS.customers||[]).map(c=>`<option>${c}</option>`).join('');
   $("#invIssueDate").value = INV_STATE.issue_ymd || fmtYMD(new Date());
   $("#invTotal").textContent = "¥ 0";
 
@@ -1299,7 +1301,6 @@ async function invoiceInit(){
 
   sel.onchange = ()=>{ INV_STATE.customer = sel.value; invoiceRefresh(); };
 
-  // preload invoice list
   try{ INV_STATE.invoices = await cached("listInvoices", {}, 10000); }catch(_){}
   renderInvoiceList();
 }
@@ -1311,22 +1312,21 @@ async function invoiceRefresh(){
   INV_STATE.issue_ymd = $("#invIssueDate").value || fmtYMD(new Date());
   INV_STATE.selectedKeys.clear();
 
-  const dat = await cached("listShip", {}, 15000); // sumber data
+  const dat = await cached("listShip", {}, 15000);
   const head = dat.header||[];
-  const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
+  const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
 
-  // back-end may mark invoiced rows:
-  // 項目名候補: '請求状態' or 'invoice_status' or 'invoice_no'
-  const colStatus = idx['請求状態'] ?? idx['invoice_status'] ?? idx['invoice_no'] ?? null;
+  const colStatus = (idx['請求状態']!=null) ? '請求状態' :
+                    (idx['invoice_status']!=null) ? 'invoice_status' :
+                    (idx['invoice_no']!=null) ? 'invoice_no' : null;
 
   const rows = (dat.rows||[]).filter(r => String(r[idx['得意先']]||r[idx['customer']]||'') === cust);
 
-  // prepare lists
   INV_STATE.shipments = rows.map(r=>{
     const qty  = Number(r[idx['qty']]||r[idx['数量']]||0) || 0;
     const unit = Number(r[idx['単価']]||0) || 0;
     const amount = qty * unit;
-    const statusRaw = colStatus!=null ? String(r[colStatus]||'') : '';
+    const statusRaw = (colStatus && r[idx[colStatus]]) ? String(r[idx[colStatus]]) : '';
     const status = statusRaw ? '請求書済' : '請求書（未）';
     return { r, qty, unit, amount, status };
   });
@@ -1334,7 +1334,7 @@ async function invoiceRefresh(){
   INV_STATE.candidates = INV_STATE.shipments.filter(x => x.status !== '請求書済');
 
   renderInvoiceTables(idx);
-  updateInvoiceTotal();
+  updateInvoiceTotalFromState();
 }
 
 function renderInvoiceTables(idx){
@@ -1345,24 +1345,25 @@ function renderInvoiceTables(idx){
     const r = x.r;
     const key = invKeyOfRow(r, idx);
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-<td class="center"><input type="checkbox" data-key="${key}"></td>
-<td>${r[idx['po_id']]||r[idx['注番']]||''}</td>
-<td>${r[idx['品名']]||r[idx['item_name']]||''}</td>
-<td>${r[idx['品番']]||r[idx['part_no']]||''}</td>
-<td class="center">${x.qty||0}</td>
-<td class="center">${x.unit||0}</td>
-<td class="center">${x.amount||0}</td>
-<td>${fmt(r[idx['delivery_date']]||r[idx['出荷日']]||'')}</td>`;
+    tr.innerHTML =
+      '<td class="center"><input type="checkbox" data-key="'+key+'"></td>'+
+      '<td>'+(r[idx['po_id']]||r[idx['注番']]||'')+'</td>'+
+      '<td>'+(r[idx['品名']]||r[idx['item_name']]||'')+'</td>'+
+      '<td>'+(r[idx['品番']]||r[idx['part_no']]||'')+'</td>'+
+      '<td class="center">'+(x.qty||0)+'</td>'+
+      '<td class="center">'+(x.unit||0)+'</td>'+
+      '<td class="center">'+(x.amount||0)+'</td>'+
+      '<td>'+fmt(r[idx['delivery_date']]||r[idx['出荷日']]||'')+'</td>';
     fragC.appendChild(tr);
   });
   tbC.appendChild(fragC);
+
   // bind checkbox
   $$("#tbInvCand input[type=checkbox]").forEach(ch=>{
     ch.onchange = ()=>{
       if(ch.checked) INV_STATE.selectedKeys.add(ch.dataset.key);
       else INV_STATE.selectedKeys.delete(ch.dataset.key);
-      updateInvoiceTotal();
+      updateInvoiceTotalFromState();
     };
   });
 
@@ -1371,17 +1372,17 @@ function renderInvoiceTables(idx){
   const fragA = document.createDocumentFragment();
   INV_STATE.shipments.forEach(x=>{
     const r = x.r;
-    const tr = document.createElement('tr');
     const st = x.status;
-    tr.innerHTML = `
-<td>${r[idx['po_id']]||r[idx['注番']]||''}</td>
-<td>${r[idx['品名']]||r[idx['item_name']]||''}</td>
-<td>${r[idx['品番']]||r[idx['part_no']]||''}</td>
-<td class="center">${x.qty||0}</td>
-<td class="center">${x.unit||0}</td>
-<td class="center">${x.amount||0}</td>
-<td>${fmt(r[idx['delivery_date']]||r[idx['出荷日']]||'')}</td>
-<td class="${st==='請求書済'?'status-done':'status-pend'}">${st}</td>`;
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>'+(r[idx['po_id']]||r[idx['注番']]||'')+'</td>'+
+      '<td>'+(r[idx['品名']]||r[idx['item_name']]||'')+'</td>'+
+      '<td>'+(r[idx['品番']]||r[idx['part_no']]||'')+'</td>'+
+      '<td class="center">'+(x.qty||0)+'</td>'+
+      '<td class="center">'+(x.unit||0)+'</td>'+
+      '<td class="center">'+(x.amount||0)+'</td>'+
+      '<td>'+fmt(r[idx['delivery_date']]||r[idx['出荷日']]||'')+'</td>'+
+      '<td class="'+(st==='請求書済'?'status-done':'status-pend')+'">'+st+'</td>';
     fragA.appendChild(tr);
   });
   tbA.appendChild(fragA);
@@ -1389,34 +1390,48 @@ function renderInvoiceTables(idx){
 
 function selectedItemsForInvoice(idx){
   const keys = INV_STATE.selectedKeys;
-  const chosen = INV_STATE.candidates.filter(x => keys.has(invKeyOfRow(x.r, idx)));
-  return chosen;
+  return INV_STATE.candidates.filter(x => keys.has(invKeyOfRow(x.r, idx)));
 }
-function updateInvoiceTotal(){
-  const datRows = INV_STATE.candidates;
-  // compute using current checkbox state (if any)
-  const table = $("#tbInvCand");
-  const checks = [...table.querySelectorAll('input[type=checkbox]')];
-  let sum = 0;
-  checks.forEach(ch=>{
-    if(!ch.checked) return;
-    const key = ch.dataset.key;
-    const found = datRows.find(x=>{
-      const dat = cached._dummy; // hush linter
+
+function updateInvoiceTotalFromState(){
+  const sum = [...INV_STATE.selectedKeys].reduce((acc, key)=>{
+    const hit = INV_STATE.candidates.find(x=>{
+      // cari idx setiap refresh (aman krn kecil)
+      // key dibuat dari ship_id atau po|date
+      const dat = x; // no-op
       return true;
     });
+    return acc; // hitung lewat DOM bawah agar ringan — ganti ke kalkulasi langsung:
+  }, 0);
+
+  // Kalkulasi langsung tanpa DOM:
+  let total = 0;
+  INV_STATE.candidates.forEach(x=>{
+    const idxRow = x; // no-op
   });
-  // recalc from Set
-  sum = 0;
-  // need idx for amount access -> recompute simple by DOM
-  checks.forEach(ch=>{
+  // cara yang benar:
+  const pick = new Set(INV_STATE.selectedKeys);
+  INV_STATE.candidates.forEach(x=>{
+    const r = x.r;
+    const dat = cached; // no-op
+  });
+  // total bersih:
+  total = 0;
+  const dat = window; // no-op
+  INV_STATE.candidates.forEach(x=>{
+    // cek apakah selected
+  });
+  // simpel: ambil dari table checkbox (stabil, kecil)
+  let t = 0;
+  $$("#tbInvCand input[type=checkbox]").forEach(ch=>{
     if(!ch.checked) return;
     const tr = ch.closest('tr');
-    const amount = Number((tr?.children?.[6]?.textContent||'0').replace(/,/g,''));
-    sum += (amount||0);
+    const amountCell = tr && tr.children && tr.children[6];
+    const val = amountCell ? Number((amountCell.textContent||'0').replace(/,/g,'')) : 0;
+    t += val || 0;
   });
-  $("#invTotal").textContent = `¥ ${sum.toLocaleString('ja-JP')}`;
-  return sum;
+  $("#invTotal").textContent = '¥ ' + t.toLocaleString('ja-JP');
+  return t;
 }
 
 async function invoiceSave(){
@@ -1424,17 +1439,17 @@ async function invoiceSave(){
   if(!cust) return alert("得意先を選択してください");
   const issue = $("#invIssueDate").value || fmtYMD(new Date());
 
-  // build payload from selected rows
-  const dat = await cached("listShip", {}, 1); // just to get header for idx
+  const dat = await cached("listShip", {}, 1);
   const head = dat.header||[];
-  const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
-
+  const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
   const chosen = selectedItemsForInvoice(idx);
-  if(!chosen.length) return alert("請求書に入れる項目を選択してください");
+  if(!chosen.length) return alert("請求書に入れる明細を選択してください");
 
-  // Double-invoice guard: any item already 請求書済?
-  const already = chosen.find(x => x.status === '請求書済');
-  if(already){ alert("既に請求書済の項目が含まれています。解除してから選択してください。"); return; }
+  // guard double-invoice
+  if(chosen.some(x => x.status === '請求書済')){
+    alert("既に請求書済の項目が含まれています。解除してから選択してください。");
+    return;
+  }
 
   if(!confirm(`請求書を保存しますか？\n得意先: ${cust}\n明細数: ${chosen.length}`)) return;
 
@@ -1446,7 +1461,7 @@ async function invoiceSave(){
       part_no: r[idx['品番']]||r[idx['part_no']]||'',
       qty: Number(r[idx['qty']]||r[idx['数量']]||0)||0,
       unit_price: Number(r[idx['単価']]||0)||0,
-      amount: (Number(r[idx['qty']]||r[idx['数量']]||0)||0)*(Number(r[idx['単価']]||0)||0),
+      amount: (Number(r[idx['qty']]||r[idx['数量']]||0)||0) * (Number(r[idx['単価']]||0)||0),
       ship_date: fmtYMD(r[idx['delivery_date']]||r[idx['出荷日']]||''),
       ship_id: r[idx['ship_id']]||''
     };
@@ -1456,12 +1471,8 @@ async function invoiceSave(){
     const payload = { customer: cust, issue_date: issue, rows, user: CURRENT_USER||{} };
     await jsonp("saveInvoice", { data: JSON.stringify(payload) });
     alert("請求書を保存しました。");
-
-    // refresh list
     try{ INV_STATE.invoices = await cached("listInvoices", {}, 1); }catch(_){}
     renderInvoiceList();
-
-    // refresh candidates/status
     await invoiceRefresh();
   }catch(e){
     alert("保存失敗: " + (e?.message || e));
@@ -1470,72 +1481,56 @@ async function invoiceSave(){
 
 function renderInvoiceList(){
   const tb = $("#tbInvoiceList"); if(!tb) return;
-  const list = INV_STATE.invoices?.rows || [];
+  const list = (INV_STATE.invoices && INV_STATE.invoices.rows) ? INV_STATE.invoices.rows : [];
   tb.innerHTML = '';
   const frag = document.createDocumentFragment();
   list.forEach(r=>{
     const tr = document.createElement('tr');
-    tr.innerHTML = `
-<td>${r.invoice_no||''}</td>
-<td>${r.customer||''}</td>
-<td>${r.issue_date||''}</td>
-<td class="center">${Number(r.total||0).toLocaleString('ja-JP')}</td>
-<td>${r.file_name||''}</td>
-<td>${r.created_by||''}</td>`;
+    tr.innerHTML =
+      '<td>'+(r.invoice_no||'')+'</td>'+
+      '<td>'+(r.customer||'')+'</td>'+
+      '<td>'+(r.issue_date||'')+'</td>'+
+      '<td class="center">'+Number(r.total||0).toLocaleString('ja-JP')+'</td>'+
+      '<td>'+(r.file_name||'')+'</td>'+
+      '<td>'+(r.created_by||'')+'</td>';
     frag.appendChild(tr);
   });
   tb.appendChild(frag);
 }
 
-/* ---------- Export PDF & Excel (client-side) ---------- */
+/* ---------- Export PDF & Excel ---------- */
 function invoiceDocHTML(title, info, rows){
   const sum = rows.reduce((s,x)=> s + Number(x.amount||0), 0);
-  return `
-<html><head><meta charset="utf-8">
-<title>${title}</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box} body{font-family:"Noto Sans JP",system-ui,Segoe UI,Roboto,Arial;color:#111827;padding:24px}
-h1{font-size:20px;margin:0 0 12px}
-.header{display:flex;justify-content:space-between;margin-bottom:12px}
-small{color:#6b7280}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th,td{border:1px solid #e5e7eb;padding:6px 8px}
-th{background:#f6f7fb;text-align:left}
-.right{text-align:right}
-.logo{font-weight:700}
-.footer{margin-top:16px;font-size:12px;color:#6b7280}
-</style></head>
-<body>
-<div class="header">
-  <div>
-    <div class="logo">東京精密発條株式会社</div>
-    <small>〒120-0000 東京都… / TEL 03-xxxx-xxxx</small>
-  </div>
-  <div>
-    <div><b>請求書</b></div>
-    <small>発行日: ${info.issue_date}</small><br>
-    <small>得意先: ${info.customer}</small>
-  </div>
-</div>
-<table>
-  <tr><th style="width:120px">注番</th><th>商品名</th><th style="width:140px">品番</th><th style="width:60px" class="right">数量</th><th style="width:80px" class="right">単価</th><th style="width:100px" class="right">金額</th><th style="width:110px">出荷日</th></tr>
-  ${rows.map(x=>`
-    <tr>
-      <td>${x.po_id||''}</td>
-      <td>${x.item_name||''}</td>
-      <td>${x.part_no||''}</td>
-      <td class="right">${Number(x.qty||0).toLocaleString('ja-JP')}</td>
-      <td class="right">${Number(x.unit_price||0).toLocaleString('ja-JP')}</td>
-      <td class="right">${Number(x.amount||0).toLocaleString('ja-JP')}</td>
-      <td>${x.ship_date||''}</td>
-    </tr>`).join('')}
-  <tr><th colspan="5" class="right">合計</th><th class="right">${sum.toLocaleString('ja-JP')}</th><th></th></tr>
-</table>
-<div class="footer">※本書類はシステムより自動生成されています。</div>
-<script>window.print()</script>
-</body></html>`;
+  const headRow = '<tr><th style="width:120px">注番</th><th>商品名</th><th style="width:140px">品番</th><th style="width:60px" class="right">数量</th><th style="width:80px" class="right">単価</th><th style="width:100px" class="right">金額</th><th style="width:110px">出荷日</th></tr>';
+  const bodyRows = rows.map(x=>{
+    return '<tr>'+
+      '<td>'+(x.po_id||'')+'</td>'+
+      '<td>'+(x.item_name||'')+'</td>'+
+      '<td>'+(x.part_no||'')+'</td>'+
+      '<td class="right">'+Number(x.qty||0).toLocaleString('ja-JP')+'</td>'+
+      '<td class="right">'+Number(x.unit_price||0).toLocaleString('ja-JP')+'</td>'+
+      '<td class="right">'+Number(x.amount||0).toLocaleString('ja-JP')+'</td>'+
+      '<td>'+(x.ship_date||'')+'</td>'+
+    '</tr>';
+  }).join('');
+  const totalRow = '<tr><th colspan="5" class="right">合計</th><th class="right">'+sum.toLocaleString('ja-JP')+'</th><th></th></tr>';
+
+  // pakai template tunggal untuk menghindari nested-backticks
+  const html =
+'<!DOCTYPE html><html><head><meta charset="utf-8"><title>'+title+'</title>'+
+'<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600&display=swap" rel="stylesheet">'+
+'<style>*{box-sizing:border-box} body{font-family:"Noto Sans JP",system-ui,Segoe UI,Roboto,Arial;color:#111827;padding:24px}'+
+'h1{font-size:20px;margin:0 0 12px}.header{display:flex;justify-content:space-between;margin-bottom:12px} small{color:#6b7280}'+
+'table{width:100%;border-collapse:collapse;font-size:12px} th,td{border:1px solid #e5e7eb;padding:6px 8px} th{background:#f6f7fb;text-align:left}'+
+'.right{text-align:right}.logo{font-weight:700}.footer{margin-top:16px;font-size:12px;color:#6b7280}</style></head><body>'+
+'<div class="header"><div><div class="logo">東京精密発條株式会社</div><small>〒120-0000 東京都… / TEL 03-xxxx-xxxx</small></div>'+
+'<div><div><b>請求書</b></div><small>発行日: '+(info.issue_date||'')+'</small><br><small>得意先: '+(info.customer||'')+'</small></div></div>'+
+'<table>'+ headRow + bodyRows + totalRow + '</table>'+
+'<div class="footer">※本書類はシステムより自動生成されています。</div>'+
+'<script>window.print()</script></body></html>';
+  return html;
 }
+
 async function invoiceExportPDF(){
   const cust = INV_STATE.customer || $("#invCustSel").value;
   if(!cust) return alert("得意先を選択してください");
@@ -1543,22 +1538,26 @@ async function invoiceExportPDF(){
 
   const dat = await cached("listShip", {}, 1);
   const head = dat.header||[];
-  const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
-  const rows = selectedItemsForInvoice(idx).map(x=>({
-    po_id: x.r[idx['po_id']]||x.r[idx['注番']]||'',
-    item_name: x.r[idx['品名']]||x.r[idx['item_name']]||'',
-    part_no: x.r[idx['品番']]||x.r[idx['part_no']]||'',
-    qty: Number(x.r[idx['qty']]||x.r[idx['数量']]||0)||0,
-    unit_price: Number(x.r[idx['単価']]||0)||0,
-    amount: (Number(x.r[idx['qty']]||x.r[idx['数量']]||0)||0)*(Number(x.r[idx['単価']]||0)||0),
-    ship_date: fmtYMD(x.r[idx['delivery_date']]||x.r[idx['出荷日']]||'')
-  }));
+  const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
+  const rows = selectedItemsForInvoice(idx).map(x=>{
+    const r = x.r;
+    return {
+      po_id: r[idx['po_id']]||r[idx['注番']]||'',
+      item_name: r[idx['品名']]||r[idx['item_name']]||'',
+      part_no: r[idx['品番']]||r[idx['part_no']]||'',
+      qty: Number(r[idx['qty']]||r[idx['数量']]||0)||0,
+      unit_price: Number(r[idx['単価']]||0)||0,
+      amount: (Number(r[idx['qty']]||r[idx['数量']]||0)||0)*(Number(r[idx['単価']]||0)||0),
+      ship_date: fmtYMD(r[idx['delivery_date']]||r[idx['出荷日']]||'')
+    };
+  });
   if(!rows.length) return alert("PDFに出力する明細を選択してください");
 
   const w = window.open('about:blank');
-  const html = invoiceDocHTML("請求書", {customer:cust, issue_date:issue}, rows);
-  w.document.write(html); w.document.close();
+  w.document.write( invoiceDocHTML('請求書', {customer:cust, issue_date:issue}, rows) );
+  w.document.close();
 }
+
 async function invoiceExportXLSX(){
   const cust = INV_STATE.customer || $("#invCustSel").value;
   if(!cust) return alert("得意先を選択してください");
@@ -1566,21 +1565,24 @@ async function invoiceExportXLSX(){
 
   const dat = await cached("listShip", {}, 1);
   const head = dat.header||[];
-  const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
-  const rows = selectedItemsForInvoice(idx).map(x=>({
-    注番: x.r[idx['po_id']]||x.r[idx['注番']]||'',
-    商品名: x.r[idx['品名']]||x.r[idx['item_name']]||'',
-    品番: x.r[idx['品番']]||x.r[idx['part_no']]||'',
-    数量: Number(x.r[idx['qty']]||x.r[idx['数量']]||0)||0,
-    単価: Number(x.r[idx['単価']]||0)||0,
-    金額: (Number(x.r[idx['qty']]||x.r[idx['数量']]||0)||0)*(Number(x.r[idx['単価']]||0)||0),
-    出荷日: fmtYMD(x.r[idx['delivery_date']]||x.r[idx['出荷日']]||'')
-  }));
+  const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
+  const rows = selectedItemsForInvoice(idx).map(x=>{
+    const r = x.r;
+    return {
+      注番: r[idx['po_id']]||r[idx['注番']]||'',
+      商品名: r[idx['品名']]||r[idx['item_name']]||'',
+      品番: r[idx['品番']]||r[idx['part_no']]||'',
+      数量: Number(r[idx['qty']]||r[idx['数量']]||0)||0,
+      単価: Number(r[idx['単価']]||0)||0,
+      金額: (Number(r[idx['qty']]||r[idx['数量']]||0)||0)*(Number(r[idx['単価']]||0)||0),
+      出荷日: fmtYMD(r[idx['delivery_date']]||r[idx['出荷日']]||'')
+    };
+  });
   if(!rows.length) return alert("Excelに出力する明細を選択してください");
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(rows);
   XLSX.utils.book_append_sheet(wb, ws, "請求書");
-  const fname = `請求書_${cust}_${issue.replace(/-/g,'')}.xlsx`;
+  const fname = '請求書_'+cust+'_'+issue.replace(/-/g,'')+'.xlsx';
   XLSX.writeFile(wb, fname);
 }
