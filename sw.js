@@ -8,7 +8,7 @@ const ASSET_CACHE = `${SW_VERSION}-assets`;
 const API_CACHE = `${SW_VERSION}-api`;
 
 // Sesuaikan origin dari proyek kamu (pakai self.location.origin untuk same-origin)
-const API_BASE = 'https://script.google.com/macros/s/AKfycbwnU2BvQ6poO4EmMut3g5Zuu_cuojNbTmM8oRSCyNJDwm_38VgS7BhsFLKU0eoUt-BAKw/exec';
+const API_BASE = 'https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec';
 
 const CORE_ASSETS = [
   './',
