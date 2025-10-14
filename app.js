@@ -22,7 +22,7 @@ function jsonp(action, params={}){
     params = { ...params, action, callback: cb };
     const s = document.createElement("script");
     s.src = `${API_BASE}?${qs(params)}`;
-    let timeout = setTimeout(()=>{ cleanup(); reject(new Error("API timeout")); }, 20000);
+    let timeout = setTimeout(()=>{ cleanup(); reject(new Error("API timeout")); }, 8000);
     function cleanup(){ try{ delete window[cb]; s.remove(); }catch{} clearTimeout(timeout); }
     window[cb] = (resp)=>{ cleanup(); if(resp && resp.ok) resolve(resp.data); else reject(new Error((resp && resp.error) || "API error")); };
     s.onerror = ()=>{ cleanup(); reject(new Error("JSONP load error")); };
@@ -88,6 +88,16 @@ function setUser(u){
     .forEach(id=> $("#"+id)?.classList.add("hidden"));
 
   if(!u){ $("#authView")?.classList.remove("hidden"); return; }
+if(u){
+  // … existing code
+  Promise.allSettled([
+    cached("listOrders",{},30000),
+    cached("listShip",{},30000),
+    cached("listPlans",{},30000),
+    cached("listFinished",{},30000),
+    cached("listInventory",{},30000)
+  ]).catch(()=>{});
+}
 
   const allow = ROLE_MAP[u.role] || ROLE_MAP[u.department] || ROLE_MAP['admin'];
   if(allow?.nav){
@@ -565,7 +575,7 @@ $("#btnShipTpl")?.addEventListener('click', ()=>{
 
 // ミニ: dashboard list today + future
 async function loadShipsMini(){
-  const dat = await cached("listShip", {}, 10000).catch(()=>null);
+  const dat = await cached("listShip", {}, 30000).catch(()=>null);
   if(!dat) return;
   const rows = dat.rows || []; const head = dat.header || []; const idx = Object.fromEntries(head.map((h,i)=>[h,i]));
   const today = new Date(); const ymd = new Date(today.getFullYear(), today.getMonth(), today.getDate());
