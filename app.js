@@ -10,12 +10,15 @@ JSONP Frontend (Optimized, with Inventory + Station QR universal)
 const API_BASE = "https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec";
 
 /* ---------- DOM helpers ---------- */
-const $ = (q,el=document)=> el.querySelector(q);
-const $$ = (q,el=document)=> [...el.querySelectorAll(q)];
-const qs = (o)=> Object.entries(o).map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
-const fmt = (d)=> d? new Date(d).toLocaleString("ja-JP"):"";
+const $  = (q, el=document)=> el.querySelector(q);
+const $$ = (q, el=document)=> [...el.querySelectorAll(q)];
+const qs = (o)=> Object.entries(o)
+  .map(([k,v])=>`${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+  .join("&");
+const fmt = (d)=> d ? new Date(d).toLocaleString("ja-JP") : "";
 const normalizeProc = (s)=> String(s||"").trim()
-  .replace("レーサ加工","レザー加工").replace("外作加工","外注加工/組立") || "未設定";
+  .replace("レーサ加工","レザー加工")
+  .replace("外作加工","外注加工/組立") || "未設定";
 
 /* ---------- tiny styles injection (for table layout & buttons) ---------- */
 function injectStyles(){
@@ -57,7 +60,7 @@ function jsonp(action, params={}){
     const s = document.createElement("script");
     s.src = `${API_BASE}?${qs(params)}`;
     let timeout = setTimeout(()=>{ cleanup(); reject(new Error("API timeout")); }, 20000);
-    function cleanup(){ delete window[cb]; s.remove(); clearTimeout(timeout); }
+    function cleanup(){ try{ delete window[cb]; }catch(_){} try{s.remove();}catch(_){ } clearTimeout(timeout); }
     window[cb] = (resp)=>{ cleanup(); if(resp && resp.ok) resolve(resp.data); else reject(new Error((resp && resp.error) || "API error")); };
     s.onerror = ()=>{ cleanup(); reject(new Error("JSONP load error")); };
     document.body.appendChild(s);
@@ -142,13 +145,13 @@ function show(id){
   .forEach(p=> $("#"+p)?.classList.add("hidden"));
   $("#"+id)?.classList.remove("hidden");
 }
-$("#btnToDash").onclick = ()=>{ show("pageDash"); refreshAll(); };
-$("#btnToSales").onclick = ()=>{ show("pageSales"); loadSales(); };
-$("#btnToPlan").onclick = ()=>{ show("pagePlan"); loadPlans(); };
-$("#btnToShip").onclick = ()=>{ show("pageShip"); loadShips(); };
-$("#btnToFinPage").onclick = ()=>{ show("pageFinished");loadFinished(); };
+$("#btnToDash").onclick    = ()=>{ show("pageDash"); refreshAll(); };
+$("#btnToSales").onclick   = ()=>{ show("pageSales"); loadSales(); };
+$("#btnToPlan").onclick    = ()=>{ show("pagePlan"); loadPlans(); };
+$("#btnToShip").onclick    = ()=>{ show("pageShip"); loadShips(); };
+$("#btnToFinPage").onclick = ()=>{ show("pageFinished"); loadFinished(); };
 $("#btnToInvPage").onclick = ()=>{ show("pageInv"); loadInventory(); };
-$("#btnLogout").onclick = ()=> setUser(null);
+$("#btnLogout").onclick    = ()=> setUser(null);
 
 /* ---------- Login ---------- */
 $("#btnLogin").onclick = loginSubmit;
@@ -557,7 +560,7 @@ async function ensureSalesIndex(){
 
 let CURRENT_SHIP_CUST = '';
 const SHIP_FIELDS = [
-  {name:'po_id',       label:'注番',      type:'select', options:()=>{  // berdasarkan customer terpilih
+  {name:'po_id',       label:'注番',      type:'select', options:()=>{  // berdasar customer terpilih
       const s = SALES_INDEX.byCustomer.get(CURRENT_SHIP_CUST);
       return s ? [...s].sort() : (MASTERS.po_ids||[]);
     }, free:true, req:true},
@@ -602,6 +605,7 @@ const SHIP_VIEW = [
 const SHIP_UI = { selectedCustomer:'', selectedDate:'', groupByDate:true };
 
 async function loadShips(){
+  await ensureSalesIndex();
   const dat = await cached("listShip");
   ensureShipControls(dat);
   renderShipSlim(dat);
@@ -666,7 +670,6 @@ function renderShipSlim(dat){
 
   tb.innerHTML = '';
   if(SHIP_UI.groupByDate){
-    // --- FIX: gunakan dstr() dan tutup blok dengan benar ---
     const groups = {};
     rows.forEach(r=>{
       const key = dstr(r[idx['scheduled_date']] ?? r[idx['出荷日']] ?? '');
@@ -868,7 +871,7 @@ const FIN_VIEW = [
 ];
 async function loadFinished(){
   const dat = await cached("listFinished", {}, 5000);
-  const th = $("#thFin"), tb = $("#tbFin"), search = $("#finSearch"]);
+  const th = $("#thFin"), tb = $("#tbFin"), search = $("#finSearch");
 
   const head = dat.header||[];
   const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
@@ -1068,7 +1071,10 @@ function renderTable(dat, thSel, tbSel, searchSel){
 /* ---------- CSV Export / Import ---------- */
 function exportTableCSV(tbodySel, filename){
   const rows = $$(tbodySel+" tr").map(tr=> [...tr.children].map(td=> td.textContent));
-  const csv = rows.map(r => r.map(v=>{ const s = (v??'').toString().replace(/"/g,'""'); return `"${s}"`; }).join(',')).join('\n');
+  const csv = rows.map(r => r.map(v=>{
+    const s = String(v ?? '').replace(/"/g,'""');
+    return `"${s}"`;
+  }).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename; a.click();
 }
@@ -1096,9 +1102,9 @@ const STATION_PROCESSES = [
   "検査工程","検査中","検査済","出荷準備","出荷（組立済）","出荷済"
 ];
 const QR_ACCEPT_PATTERNS = [
-  /^STN\|(.+)$/i,
-  /^PROC[:|](.+)$/i,
-  /^工程[:|](.+)$/
+  /^STN\|(.+)$/i,        // STN|工程
+  /^PROC[:|](.+)$/i,     // PROC:工程 / PROC|工程
+  /^工程[:|](.+)$/       // 工程:工程 / 工程|工程
 ];
 function qrUrl(payload, size=512){
   return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(payload)}`;
@@ -1279,39 +1285,17 @@ document.addEventListener("DOMContentLoaded", ()=> setUser(null));
 /* ---------- Print 出荷予定 ---------- */
 async function printShipByCustomer(cust, ymd){
   const dat = await cached("listShip", {}, 5000);
-  const head = dat.header||[];
-  const idx  = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
+  const head = dat.header||[]; const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
+  const rowsAll = (dat.rows||[]).filter(r => String(r[idx['得意先']]||r[idx['customer']]||'') === cust);
+  const dkey = (v)=>{ const d=(v instanceof Date)?v:new Date(v); return isNaN(d)?'(日付未設定)':new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
+  const rows = ymd ? rowsAll.filter(r => dkey(r[idx['scheduled_date']]||r[idx['出荷日']]) === ymd) : rowsAll;
 
-  const rowsAll = (dat.rows||[]).filter(
-    r => String(r[idx['得意先']] || r[idx['customer']] || '') === cust
-  );
+  const groups = {}; rows.forEach(r=>{ const k = dkey(r[idx['scheduled_date']]||r[idx['出荷日']]); if (!groups[k]) groups[k] = []; groups[k].push(r); });
 
-  const dkey = (v)=>{
-    const d = (v instanceof Date) ? v : new Date(v);
-    return isNaN(d)
-      ? '(日付未設定)'
-      : new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
-  };
-
-  const rows = ymd
-    ? rowsAll.filter(r => dkey(r[idx['scheduled_date']] || r[idx['出荷日']]) === ymd)
-    : rowsAll;
-
-  // group by date  ✅ (tutup forEach dengan benar)
-  const groups = {};
-  rows.forEach(r => {
-    const k = dkey(r[idx['scheduled_date']] || r[idx['出荷日']]);
-    if (!groups[k]) groups[k] = [];
-    groups[k].push(r);
-  });
-
-  const mapDate = (v)=>{
-    const d = (v instanceof Date) ? v : new Date(v);
-    return isNaN(d) ? '' : d.toLocaleDateString('ja-JP');
-  };
+  const mapDate = (v)=>{ const d=(v instanceof Date)?v:new Date(v); return isNaN(d)?'':d.toLocaleDateString('ja-JP'); };
 
   const html = `
-<html><head><meta charset="utf-8"><title>出荷予定 - ${cust}${ymd ? ' '+ymd : ''}</title>
+<html><head><meta charset="utf-8"><title>出荷予定 - ${cust}${ymd? ' '+ymd:''}</title>
 <style>
 body{font-family:system-ui,"Segoe UI",Roboto,Helvetica,Arial;padding:24px;}
 h1{font-size:20px;margin:0 0 6px;}
@@ -1322,7 +1306,7 @@ th{background:#f6f7fb;}
 .right{text-align:right}
 </style></head>
 <body>
-<h1>出荷予定（${cust}${ymd ? ' / '+ymd : ''}）</h1>
+<h1>出荷予定（${cust}${ymd? ' / '+ymd:''}）</h1>
 ${Object.keys(groups).sort().map(k=>{
   const arr = groups[k];
   const total = arr.reduce((s,r)=> s + Number(r[idx['qty']]||r[idx['数量']]||0), 0);
@@ -1348,8 +1332,5 @@ ${Object.keys(groups).sort().map(k=>{
 }).join('')}
 <script>window.print();</script>
 </body></html>`;
-
-  const w = window.open('about:blank');
-  w.document.write(html);
-  w.document.close();
+  const w = window.open('about:blank'); w.document.write(html); w.document.close();
 }
