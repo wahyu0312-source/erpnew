@@ -1388,4 +1388,419 @@ function exportChartDataXLSX(){
 })();
 
 }
+/* =========================================================
+ *  分析チャート モジュール  (append-only / drop-in)
+ *  Tempel di BAWAH file app.js lama Anda.
+ * =======================================================*/
+(function () {
+  // ---------- small polyfills ----------
+  if (!('requestIdleCallback' in window)) {
+    window.requestIdleCallback = function (cb) {
+      return setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 0 }), 0);
+    };
+    window.cancelIdleCallback = function (id) { clearTimeout(id); };
+  }
+
+  // ---------- JSONP safety wrapper (pakai yg lama jika ada) ----------
+  async function callAPI(action, params = {}, { ttlMs = 15000, retry = 1 } = {}) {
+    // pakai helper lama jika tersedia
+    if (typeof cached === 'function') {
+      try {
+        return await cached(action, params, ttlMs);
+      } catch (e) {
+        if (retry > 0) return callAPI(action, params, { ttlMs, retry: retry - 1 });
+        throw e;
+      }
+    }
+    if (typeof jsonp === 'function') {
+      try {
+        return await jsonp(action, params);
+      } catch (e) {
+        if (retry > 0) return callAPI(action, params, { ttlMs, retry: retry - 1 });
+        throw e;
+      }
+    }
+    throw new Error('API bridge (jsonp/cached) is not available');
+  }
+
+  // ---------- nav bind ----------
+  const $ = (q, el = document) => el.querySelector(q);
+  const $$ = (q, el = document) => Array.from(el.querySelectorAll(q));
+  function showPage(id) {
+    ["authView", "pageDash", "pageSales", "pagePlan", "pageShip", "pageFinished", "pageInv", "pageInvoice", "pageCharts"]
+      .forEach(x => $("#" + x)?.classList.add("hidden"));
+    $("#" + id)?.classList.remove("hidden");
+  }
+  $("#btnToCharts")?.addEventListener("click", () => { showPage("pageCharts"); CHARTS.reload(); });
+
+  // =================================================================
+  //                          CHARTS CORE
+  // =================================================================
+  const CHARTS = {
+    _inited: false,
+    _charts: {},   // {daily, monthly, top, custMonthly}
+    _state: {
+      year: '', month: '', customer: '',
+      mode: 'month', // or 'year'
+      type: 'stacked', // stacked | pareto | pie
+      pick: 'ALL'
+    },
+    async initOnce() {
+      if (this._inited) return;
+      this._inited = true;
+
+      // fill Tahun
+      const ySel = $("#chYear");
+      const nowY = new Date().getFullYear();
+      ySel.innerHTML = '<option value="">(全て)</option>' +
+        Array.from({ length: 6 }).map((_, i) => {
+          const y = nowY - i;
+          return `<option value="${y}">${y}年</option>`;
+        }).join('');
+      ySel.value = String(nowY); // default tahun ini
+
+      // bind filters
+      $("#chYear").addEventListener("change", () => { this._state.year = $("#chYear").value; this.reload(); });
+      $("#chMonth").addEventListener("change", () => { this._state.month = $("#chMonth").value; this.reload(); });
+      $("#chCust").addEventListener("change", () => { this._state.customer = $("#chCust").value; this.reload(); });
+
+      $("#chMode").addEventListener("change", () => { this._state.mode = $("#chMode").value; this.reload(); });
+      $("#chType").addEventListener("change", () => { this._state.type = $("#chType").value; this.reload(); });
+      $("#chPick").addEventListener("change", () => { this._state.pick = $("#chPick").value || 'ALL'; this.reload(false); });
+
+      $("#chReload").addEventListener("click", () => this.reload(true));
+      $("#chExportImg").addEventListener("click", () => this.exportPNG());
+      $("#chExportXlsx").addEventListener("click", () => this.exportExcel());
+    },
+
+    // --------- fetch ship data via Apps Script (listShip) ----------
+    async fetchShip() {
+      // expected shape: {header:[], rows:[[]]}
+      const dat = await callAPI("listShip", {}, { ttlMs: 20000, retry: 1 });
+
+      const head = dat?.header || [];
+      const rows = dat?.rows || [];
+      const idx = Object.fromEntries(head.map((h, i) => [String(h).trim(), i]));
+      const col = (name, alt = []) => {
+        if (idx[name] != null) return idx[name];
+        for (const a of alt) if (idx[a] != null) return idx[a];
+        return null;
+      };
+
+      const cDate = col('scheduled_date', ['出荷日', '納期', 'delivery_date']);
+      const cCust = col('得意先', ['customer']);
+      const cQty = col('qty', ['数量']);
+      const cItem = col('品名', ['item_name']);
+      const cPO = col('po_id', ['注番']);
+      // unit price optional
+      const cUnit = col('単価', ['unit_price']);
+      // pre-map to object
+      const out = rows.map(r => ({
+        date: safeDate(r[cDate]),
+        year: ymd(r[cDate]).y,
+        month: ymd(r[cDate]).m,
+        ym: ymd(r[cDate]).ym,
+        cust: String(r[cCust] ?? '').trim() || '—',
+        qty: num(r[cQty]),
+        item: String(r[cItem] ?? '').trim(),
+        po: String(r[cPO] ?? '').trim(),
+        unit: num(r[cUnit]),
+      })).filter(x => !!x.date);
+
+      // fill customer options
+      const custs = Array.from(new Set(out.map(x => x.cust).filter(Boolean))).sort();
+      const sel = $("#chCust");
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">(全て)</option>' + custs.map(c => `<option value="${escapeHTML(c)}">${escapeHTML(c)}</option>`).join('');
+      if (custs.includes(cur)) sel.value = cur;
+
+      return out;
+
+      // helpers
+      function num(v) { const n = Number(String(v || '').replace(/,/g, '')); return Number.isFinite(n) ? n : 0; }
+      function safeDate(v) { const d = new Date(v); return isNaN(d) ? null : d; }
+      function ymd(v) {
+        const d = new Date(v); if (isNaN(d)) return { y: '', m: '', ym: '' };
+        const y = d.getFullYear(); const m = d.getMonth() + 1;
+        return { y, m, ym: `${y}-${String(m).padStart(2, '0')}` };
+      }
+      function escapeHTML(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+    },
+
+    // --------- aggregate & filter ----------
+    filter(records) {
+      const { year, month, customer } = this._state;
+      return records.filter(r => {
+        if (year && String(r.year) !== String(year)) return false;
+        if (month && String(r.month) !== String(month)) return false;
+        if (customer && r.cust !== customer) return false;
+        return true;
+      });
+    },
+
+    aggregate(recs) {
+      // daily, monthly YTD, yearly, top cust, cust-month matrix
+      const byDay = new Map();
+      const byYM = new Map();
+      const byY = new Map();
+      const byCust = new Map();
+      const custMonth = new Map(); // ym -> cust -> qty
+      const custYear = new Map();  // y -> cust -> qty
+
+      for (const r of recs) {
+        const day = r.date.toISOString().slice(0, 10);
+        const ym = r.ym;
+        const y = r.year;
+        const v = r.qty;
+
+        byDay.set(day, (byDay.get(day) || 0) + v);
+        byYM.set(ym, (byYM.get(ym) || 0) + v);
+        byY.set(y, (byY.get(y) || 0) + v);
+        byCust.set(r.cust, (byCust.get(r.cust) || 0) + v);
+
+        if (!custMonth.has(ym)) custMonth.set(ym, new Map());
+        custMonth.get(ym).set(r.cust, (custMonth.get(ym).get(r.cust) || 0) + v);
+
+        if (!custYear.has(y)) custYear.set(y, new Map());
+        custYear.get(y).set(r.cust, (custYear.get(y).get(r.cust) || 0) + v);
+      }
+
+      const sortK = a => a.sort();
+      const dailyLabels = sortK(Array.from(byDay.keys()));
+      const dailyValues = dailyLabels.map(k => byDay.get(k));
+
+      // YTD monthly 1..12
+      const now = new Date();
+      const yr = this._state.year ? Number(this._state.year) : now.getFullYear();
+      const ytdLabels = Array.from({ length: 12 }, (_, i) => `${yr}-${String(i + 1).padStart(2, '0')}`);
+      const ytdValues = ytdLabels.map(k => byYM.get(k) || 0);
+
+      const yearlyLabels = sortK(Array.from(byY.keys()).map(String));
+      const yearlyValues = yearlyLabels.map(k => byY.get(Number(k)) || 0);
+
+      const topEntries = Array.from(byCust.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      const topLabels = topEntries.map(e => e[0]);
+      const topValues = topEntries.map(e => e[1]);
+
+      const months = sortK(Array.from(custMonth.keys()));
+      const years = sortK(Array.from(custYear.keys()).map(String));
+
+      // dataset stacked (Top 6)
+      const top6 = Array.from(byCust.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6).map(e => e[0]);
+      const custMonthDatasets = top6.map(cn => ({
+        label: cn,
+        data: months.map(m => (custMonth.get(m)?.get(cn) || 0))
+      }));
+      const custYearDatasets = top6.map(cn => ({
+        label: cn,
+        data: years.map(y => (custYear.get(Number(y))?.get(cn) || 0))
+      }));
+
+      // for picker (ALL/each month/year)
+      const monthTotalsByCust = Object.fromEntries(months.map(m => [m, Object.fromEntries(custMonth.get(m) || [])]));
+      const yearTotalsByCust = Object.fromEntries(years.map(y => [y, Object.fromEntries(custYear.get(Number(y)) || [])]));
+      // ALL
+      monthTotalsByCust.ALL = sumAcross(monthTotalsByCust);
+      yearTotalsByCust.ALL = sumAcross(yearTotalsByCust);
+
+      // fill pick options
+      const pickSel = $("#chPick");
+      const mode = this._state.mode;
+      const arr = mode === 'month' ? months : years;
+      const keep = pickSel.value || 'ALL';
+      pickSel.innerHTML = `<option value="ALL">ALL</option>` +
+        arr.map(v => `<option value="${v}">${v}</option>`).join('');
+      pickSel.value = keep;
+
+      return {
+        dailyLabels, dailyValues,
+        ytdLabels, ytdValues,
+        yearlyLabels, yearlyValues,
+        topLabels, topValues,
+        months, years,
+        custMonthDatasets, custYearDatasets,
+        monthTotalsByCust, yearTotalsByCust
+      };
+
+      function sumAcross(mapObj) {
+        const total = {};
+        Object.values(mapObj).forEach(entry => {
+          Object.entries(entry).forEach(([k, v]) => { total[k] = (total[k] || 0) + (v || 0); });
+        });
+        return total;
+      }
+    },
+
+    // --------- render charts (destroy-before-create) ----------
+    upsert(ref, ctx, config) {
+      try {
+        const instOld = this._charts[ref];
+        if (instOld && typeof instOld.destroy === 'function') {
+          instOld.destroy();
+        }
+      } catch { /* noop */ }
+      this._charts[ref] = new Chart(ctx, config);
+    },
+
+    render(ag) {
+      Chart.register(ChartDataLabels);
+
+      // Daily (line)
+      this.upsert('daily', $('#cDaily'), {
+        type: 'line',
+        data: { labels: ag.dailyLabels, datasets: [{ label: '数量', data: ag.dailyValues, tension: .25, pointRadius: 2, fill: false }] },
+        options: baseOpt()
+      });
+
+      // Monthly YTD (bar)
+      this.upsert('monthly', $('#cMonthly'), {
+        type: 'bar',
+        data: { labels: ag.ytdLabels.map(l => l.slice(5) + '月'), datasets: [{ label: '数量', data: ag.ytdValues }] },
+        options: baseOpt()
+      });
+
+      // Top customers (bar horizontal)
+      this.upsert('top', $('#cTopCust'), {
+        type: 'bar',
+        data: { labels: ag.topLabels, datasets: [{ label: '数量', data: ag.topValues }] },
+        options: Object.assign(baseOpt(), { indexAxis: 'y' })
+      });
+
+      // Customer monthly/yearly
+      const mode = this._state.mode;
+      const type = this._state.type;
+      const pick = this._state.pick || 'ALL';
+
+      if (type === 'stacked') {
+        const labels = mode === 'month' ? ag.months : ag.years;
+        const dataSets = mode === 'month' ? ag.custMonthDatasets : ag.custYearDatasets;
+        this.upsert('custMonthly', $('#cCustMonthly'), {
+          type: 'bar',
+          data: { labels, datasets: dataSets },
+          options: Object.assign(baseOpt(false), {
+            plugins: { legend: { position: 'bottom' }, datalabels: { display: false } },
+            scales: { x: { stacked: true }, y: { stacked: true, ticks: { precision: 0 } } }
+          })
+        });
+      } else if (type === 'pie') {
+        const map = (mode === 'month' ? ag.monthTotalsByCust : ag.yearTotalsByCust)[pick] || {};
+        const entries = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 10);
+        this.upsert('custMonthly', $('#cCustMonthly'), {
+          type: 'pie',
+          data: { labels: entries.map(e => e[0]), datasets: [{ data: entries.map(e => e[1]) }] },
+          options: Object.assign(baseOpt(false), {
+            plugins: {
+              legend: { position: 'right' },
+              datalabels: {
+                display: true,
+                formatter: (v, ctx) => {
+                  const sum = ctx.dataset.data.reduce((a, b) => a + b, 0) || 1;
+                  const p = Math.round(v / sum * 100);
+                  return `${v} (${p}%)`;
+                }
+              }
+            }
+          })
+        });
+      } else { // pareto
+        const map = (mode === 'month' ? ag.monthTotalsByCust : ag.yearTotalsByCust)[pick] || {};
+        const entries = Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 12);
+        const labels = entries.map(e => e[0]);
+        const vals = entries.map(e => e[1]);
+        const total = vals.reduce((a, b) => a + b, 0) || 1;
+        const cum = [];
+        vals.reduce((acc, v, i) => (cum[i] = Math.round((acc + v) / total * 100), acc + v), 0);
+        this.upsert('custMonthly', $('#cCustMonthly'), {
+          type: 'bar',
+          data: { labels, datasets: [{ label: '数量', data: vals, yAxisID: 'y' }, { label: '累積(%)', data: cum, type: 'line', yAxisID: 'y1', tension: .25, pointRadius: 2 }] },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: true }, datalabels: { display: true, anchor: 'end', align: 'top', formatter: (v, ctx) => ctx.dataset.type === 'line' ? v + '%' : v } },
+            scales: { y: { beginAtZero: true }, y1: { position: 'right', beginAtZero: true, max: 100, grid: { drawOnChartArea: false } } }
+          }
+        });
+      }
+
+      function baseOpt(withDatalabel = true) {
+        return {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            datalabels: { display: withDatalabel, anchor: 'end', align: 'top', offset: 4, formatter: v => (v == null || isNaN(v) ? '' : Math.round(v)) }
+          },
+          scales: { x: { grid: { color: '#eef2ff' } }, y: { grid: { color: '#f1f5f9' }, ticks: { precision: 0 } } }
+        };
+      }
+    },
+
+    // --------- export ----------
+    async exportPNG() {
+      const { jsPDF } = window.jspdf || {};
+      if (!jsPDF) { alert('PDF エクスポートのライブラリが読み込まれていません'); return; }
+      const doc = new jsPDF('l', 'pt', 'a4');
+      const canvases = ['cDaily', 'cMonthly', 'cTopCust', 'cCustMonthly'].map(id => document.getElementById(id));
+      let y = 40;
+      for (const cv of canvases) {
+        const url = cv.toDataURL('image/png', 1.0);
+        doc.addImage(url, 'PNG', 30, y, 750, 300);
+        y += 320;
+        if (y > 520) { doc.addPage(); y = 40; }
+      }
+      const fn = `charts_${Date.now()}.pdf`;
+      doc.save(fn);
+    },
+
+    async exportExcel() {
+      const recs = this._lastRecs || [];
+      const ag = this._lastAg || { dailyLabels: [], dailyValues: [], ytdLabels: [], ytdValues: [], yearlyLabels: [], yearlyValues: [], topLabels: [], topValues: [] };
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['日付', '数量'], ...ag.dailyLabels.map((d, i) => [d, ag.dailyValues[i]])]), 'Daily');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['月', '数量'], ...ag.ytdLabels.map((m, i) => [m, ag.ytdValues[i]])]), 'MonthlyYTD');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['年', '数量'], ...ag.yearlyLabels.map((y, i) => [y, ag.yearlyValues[i]])]), 'Yearly');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['顧客', '数量'], ...ag.topLabels.map((c, i) => [c, ag.topValues[i]])]), 'TopCustomers');
+      XLSX.writeFile(wb, `charts_export_${Date.now()}.xlsx`);
+    },
+
+    // --------- reload pipeline ----------
+    async reload(forceRefetch = false) {
+      await this.initOnce();
+      try {
+        $("#chReload").disabled = true;
+
+        // ambil data
+        // jika Anda sudah memiliki cache('listShip'), forceRefetch=false akan memanfaatkan TTL
+        const all = await this.fetchShip();
+
+        // simpan terakhir buat export
+        this._lastRecsRaw = all.slice();
+
+        // filter sesuai UI
+        const filtered = this.filter(all);
+        this._lastRecs = filtered;
+
+        // agregasi
+        const ag = this.aggregate(filtered);
+        this._lastAg = ag;
+
+        // render
+        this.render(ag);
+      } catch (e) {
+        console.error(e);
+        alert('チャートの読み込みに失敗しました: ' + (e?.message || e));
+      } finally {
+        $("#chReload").disabled = false;
+      }
+    }
+  };
+
+  // expose untuk debug jika perlu
+  window.CHARTS = CHARTS;
+
+  // auto-init saat halaman charts ditampilkan pertama kali (jika user langsung klik menu)
+  document.addEventListener('DOMContentLoaded', () => {
+    // kalau user sudah login & klik menu charts, handler di btnToCharts akan memanggil reload()
+    // optional: autoload pertama kali agar terasa cepat ketika membuka menu
+    // requestIdleCallback(() => CHARTS.reload());
+  });
+})();
 
