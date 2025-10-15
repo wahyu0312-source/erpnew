@@ -1,12 +1,18 @@
 /* =========================
-   app.js (stable, safe-bind)
+   app.js (safe, no .onclick)
    ========================= */
 
 /* ---------- Tiny DOM helpers ---------- */
 const $  = (q, el=document) => el.querySelector(q);
 const $$ = (q, el=document) => [...el.querySelectorAll(q)];
-function on(id, type, fn){ const el = (typeof id==='string') ? document.getElementById(id) : id; if(el) el.addEventListener(type, fn, false); }
-function onSel(sel, type, fn){ const el = document.querySelector(sel); if(el) el.addEventListener(type, fn, false); }
+function on(idOrEl, type, fn){
+  const el = (typeof idOrEl==='string') ? document.getElementById(idOrEl) : idOrEl;
+  if (el) el.addEventListener(type, fn, false);
+}
+function onSel(sel, type, fn){
+  const el = document.querySelector(sel);
+  if (el) el.addEventListener(type, fn, false);
+}
 const fmt = (d)=> d? new Date(d).toLocaleString("ja-JP"):"";
 
 /* ---------- Config ---------- */
@@ -57,14 +63,13 @@ function showPage(id){
   $("#"+id)?.classList.remove("hidden");
 }
 
-/* ---------- After login: control which nav visible ---------- */
+/* ---------- After login ---------- */
 function setUser(u){
   CURRENT_USER = u || null;
 
   const navIds = ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToFinPage','btnToInvPage','btnToInvoice','btnToAnalytics','ddSetting','weatherWrap'];
   navIds.forEach(id=> $("#"+id)?.classList.add("hidden"));
 
-  // always hide pages first
   showPage("authView");
   $("#userInfo")?.textContent = u ? `${u.role||''} / ${u.department||''}` : "";
 
@@ -86,7 +91,7 @@ function setUser(u){
     loadMasters();
   }
   showPage("pageDash");
-  refreshAll();   // initial load dashboard
+  refreshAll();
 }
 
 /* ---------- Nav clicks (safe) ---------- */
@@ -116,20 +121,17 @@ async function loginSubmit(){
     alert("ログイン失敗: " + (e?.message || e));
   }
 }
-
 on('btnLogout','click', ()=> setUser(null));
 
 /* ============================================================
-   DASHBOARD (minimal sample list + actions)
+   DASHBOARD
    ============================================================ */
 let ORDERS = [];
 async function loadOrders(){
   ORDERS = await cached("listOrders", {}, 10000).catch(()=>[]);
   renderOrders();
-  loadShipsMini(); // side mini widgets
+  loadShipsMini();
 }
-
-// incremental renderer (safe without requestIdleCallback)
 function renderOrders(){
   const q = ($("#searchQ")?.value||"").trim().toLowerCase();
   const rows = ORDERS.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
@@ -142,8 +144,7 @@ function renderOrders(){
     for(; i<end; i++){
       const r = rows[i];
       const tr = document.createElement("tr");
-      const ok = (r.ok_count ?? 0);
-      const ng = (r.ng_count ?? 0);
+      const ok = (r.ok_count ?? 0), ng = (r.ng_count ?? 0);
       tr.innerHTML = `
         <td>
           <div class="s muted">注番</div>
@@ -174,15 +175,14 @@ function renderOrders(){
     tb.appendChild(frag);
     if(i<rows.length){ setTimeout(paint, 0); }
     else{
-      $$(".btn-stqr",tb).forEach(b=> b.onclick = openStationQrSheet);
-      $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
-      $$(".btn-op",tb).forEach(b=> b.onclick=(e)=> openOpDialog(e.currentTarget.dataset.po));
+      $$(".btn-stqr",tb).forEach(b=> b.addEventListener('click', openStationQrSheet, false));
+      $$(".btn-scan",tb).forEach(b=> b.addEventListener('click', (e)=> openScanDialog(e.currentTarget.dataset.po), false));
+      $$(".btn-op",tb).forEach(b=> b.addEventListener('click', (e)=> openOpDialog(e.currentTarget.dataset.po), false));
     }
   })();
 }
 on('searchQ','input', ()=> renderOrders());
 on('btnExportOrders','click', ()=> exportTableCSV("#tbOrders","orders.csv"));
-
 async function refreshAll(){ await loadOrders(); }
 
 /* ---------- 手入力 (OK/NG) ---------- */
@@ -223,7 +223,6 @@ async function loadMasters(){ try{ MASTERS = await cached("listMasters", {}, 600
 
 /* ============================================================
    SALES / PLAN / SHIP (list slim)
-   (Renderer ringkas—cukup untuk kompatibilitas layout)
    ============================================================ */
 async function loadSales(){
   const dat = await cached("listSales", {}, 15000).catch(()=>({header:[],rows:[]}));
@@ -258,7 +257,7 @@ function renderTableSlim(dat, thSel, tbSel, searchSel, tag){
       if(i<picked.length) setTimeout(paint,0);
     })();
   };
-  search && (search.oninput = ()=> render());
+  if (search && !search._binded){ search._binded=true; search.addEventListener('input', render, false); }
   render();
 }
 
@@ -287,7 +286,7 @@ async function loadShipsMini(){
 }
 
 /* ============================================================
-   FINISHED (fix error “missing ) after argument list”)
+   FINISHED
    ============================================================ */
 const FIN_VIEW = [
   {label:'注番', keys:['po_id','注番']},
@@ -330,14 +329,14 @@ async function loadFinished(){
       if(i<rows.length) setTimeout(paint,0);
     })();
   };
-  search && (search.oninput = ()=> render());
+  if (search && !search._binded){ search._binded=true; search.addEventListener('input', render, false); }
   render();
 }
 on('btnFinExport','click', ()=> exportTableCSV("#tbFin","finished_goods.csv"));
 on('btnFinPrint','click', ()=> window.print());
 
 /* ============================================================
-   INVENTORY (simple filter)
+   INVENTORY
    ============================================================ */
 const INV_UI = { cust:'', item:'' };
 async function loadInventory(){
@@ -359,8 +358,8 @@ function ensureInvControls(dat){
   function makeLabel(txt, el){ const w=document.createElement("div"); w.className="row gap s"; w.innerHTML=`<div class="muted s" style="min-width:72px">${txt}</div>`; w.append(el); return w; }
   bar.append(makeLabel("得意先", selCust), makeLabel("機種/品名", selItem));
   wrap.insertBefore(bar, wrap.querySelector(".table-wrap"));
-  selCust.onchange = ()=>{ INV_UI.cust = selCust.value; renderInventory(dat); };
-  selItem.onchange = ()=>{ INV_UI.item = selItem.value; renderInventory(dat); };
+  selCust.addEventListener('change', ()=>{ INV_UI.cust = selCust.value; renderInventory(dat); }, false);
+  selItem.addEventListener('change', ()=>{ INV_UI.item = selItem.value; renderInventory(dat); }, false);
 }
 function renderInventory(dat){
   const th = $("#thInv"), tb = $("#tbInv"), search = $("#invSearch"); if(!th||!tb) return;
@@ -388,7 +387,7 @@ function renderInventory(dat){
     tb.appendChild(frag);
     if(i<rows.length) setTimeout(paint,0);
   })();
-  if(search && !search._invBind){ search._invBind=true; search.oninput = ()=>renderInventory(dat); }
+  if(search && !search._invBind){ search._invBind=true; search.addEventListener('input', ()=>renderInventory(dat), false); }
 }
 on('btnInvExport','click', ()=> exportTableCSV("#tbInv","inventory.csv"));
 on('btnInvPrint','click', ()=> window.print());
@@ -399,7 +398,6 @@ on('btnInvPrint','click', ()=> window.print());
 let INVOICE_STATE = { cust:'', issue_date:'', pending:[], picked:[], list:[] };
 
 function invoiceInit(){
-  // set controls
   const sel = $("#invoiceCustomer"); if(sel){ sel.innerHTML = `<option value="">(得意先を選択)</option>` + (MASTERS.customers||[]).map(c=>`<option value="${c}">${c}</option>`).join(''); }
   const d = $("#invoiceIssue"); if(d && !d.value){ const z=n=>String(n).padStart(2,'0'); const now=new Date(); d.value = `${now.getFullYear()}-${z(now.getMonth()+1)}-${z(now.getDate())}`; }
   onSel('#invoiceCustomer','change', ()=> { INVOICE_STATE.cust = $("#invoiceCustomer").value; renderInvoiceTables(); });
@@ -408,19 +406,17 @@ function invoiceInit(){
   on('btnInvoiceXlsx','click', exportInvoiceExcel);
   on('btnInvoicePdf','click', exportInvoicePdf);
   renderInvoiceTables();
-  renderInvoiceList(); // existing invoices
+  renderInvoiceList();
 }
 
 async function renderInvoiceTables(){
   const tb = $("#tbInvoicePending"); const cust = $("#invoiceCustomer")?.value||""; if(!tb) return;
   tb.innerHTML = ""; INVOICE_STATE.pending = []; INVOICE_STATE.picked = [];
   if(!cust){ tb.innerHTML = `<tr><td class="center muted" colspan="8">得意先を選択してください</td></tr>`; return; }
-  // sumber dari pengiriman (listShip)
   const dat = await cached("listShip", {}, 15000).catch(()=>({header:[],rows:[]}));
   const head = dat.header||[]; const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
   const rows = (dat.rows||[]).filter(r => (String(r[idx['得意先']]||r[idx['customer']]||'')===cust));
-  // status “請求書済” (simulasi: kalau ada col status_invoice)
-  const colInv = idx['請求書']; // ex: 済 / 未
+  const colInv = idx['請求書'];
   const pending = rows.filter(r => !colInv || !/済/.test(String(r[colInv]||'未'))).map(r=>{
     const qty = Number(r[idx['qty']] || r[idx['数量']] || 0);
     const unit = Number(r[idx['単価']] || 0);
@@ -449,12 +445,16 @@ async function renderInvoiceTables(){
   });
   tb.appendChild(frag);
   $$('#tbInvoicePending input[type="checkbox"]').forEach(chk=>{
-    chk.onchange = ()=>{
+    chk.addEventListener('change', ()=>{
       const i = Number(chk.dataset.i);
-      if(chk.checked) INVOICE_STATE.picked.push(INVOICE_STATE.pending[i]);
-      else INVOICE_STATE.picked = INVOICE_STATE.picked.filter((_,ix)=> ix!==INVOICE_STATE.pending.indexOf(INVOICE_STATE.pending[i]));
+      const target = INVOICE_STATE.pending[i];
+      if(chk.checked){
+        if(!INVOICE_STATE.picked.includes(target)) INVOICE_STATE.picked.push(target);
+      }else{
+        INVOICE_STATE.picked = INVOICE_STATE.picked.filter(x=> x!==target);
+      }
       invoiceUpdateTotals();
-    };
+    }, false);
   });
   invoiceUpdateTotals();
 }
@@ -477,7 +477,6 @@ async function saveInvoice(){
   }catch(e){ alert("保存失敗: " + e.message); }
 }
 async function renderInvoiceList(){
-  // contoh ambil list dari API jika ada
   const tb = $("#tbInvoiceList"); if(!tb) return;
   tb.innerHTML = "";
   const dat = await cached("listInvoice", {}, 10000).catch(()=>({rows:[]}));
@@ -530,14 +529,12 @@ function exportInvoicePdf(){
 }
 
 /* ============================================================
-   ANALYTICS (Chart.js) – destroy-safe
+   ANALYTICS (Chart.js)
    ============================================================ */
 let chartDaily, chartMonthly, chartCust, chartCustMon;
-
 function destroyChart(c){ try{ c && c.destroy && c.destroy(); }catch(_){} }
 
 async function analyticsInit(){
-  // tombol & filter dasar
   on('dailyOrient','click', ()=> { state.dailyOrient = (state.dailyOrient==='v'?'h':'v'); localSave(); renderAnalytics(); });
   on('monthlyOrient','click', ()=> { state.monthlyOrient = (state.monthlyOrient==='v'?'h':'v'); localSave(); renderAnalytics(); });
   on('custTypeBar','click', ()=> { state.custType='bar'; localSave(); renderAnalytics(); });
@@ -569,7 +566,6 @@ async function renderAnalytics(){
   const custCol = idx['得意先'] ?? idx['customer'];
   const qtyCol  = idx['qty'] ?? idx['数量'];
 
-  // aggregate
   const mapDaily={}, mapMonthly={}, mapYearly={}, mapCust={}, mapCustMon={}, mapCustYear={};
   (dat.rows||[]).forEach(r=>{
     const d = new Date(r[dateCol]); if(isNaN(d)) return;
@@ -587,11 +583,24 @@ async function renderAnalytics(){
     (mapCustYear[year]||(mapCustYear[year]={}))[cust]=(mapCustYear[year][cust]||0)+qty;
   });
 
-  // destroy old
   destroyChart(chartDaily); destroyChart(chartMonthly); destroyChart(chartCust); destroyChart(chartCustMon);
   if(!window.Chart) return;
-
   Chart.register(window.ChartDataLabels||{});
+
+  const makeOptions=(horizontal=false, maxVal=null)=>{
+    const headroom = maxVal? Math.ceil(maxVal*1.15) : undefined;
+    const scales = horizontal
+      ? { x:{ grid:{color:'#eef2ff'}, suggestedMax: headroom }, y:{ grid:{color:'#f1f5f9'} } }
+      : { x:{ grid:{color:'#eef2ff'} }, y:{ grid:{color:'#f1f5f9'}, suggestedMax: headroom, ticks:{precision:0}} };
+    return {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        datalabels:{ display: state.labels, anchor:'end', align: horizontal?'end':'top', offset:4,
+          formatter:(v)=> (v==null||isNaN(v))?'':String(Math.round(v)) }
+      },
+      scales
+    };
+  };
 
   /* Daily */
   const dL = Object.keys(mapDaily).sort();
@@ -602,7 +611,7 @@ async function renderAnalytics(){
     options: makeOptions(state.dailyOrient==='h', Math.max(0,...dV))
   });
 
-  /* Monthly YTD (12 month of current year) */
+  /* Monthly YTD */
   const now = new Date(); const yr=now.getFullYear(); const ytdLabels = Array.from({length:12}, (_,i)=>`${i+1}月`);
   const ytdVals = ytdLabels.map((_,i)=> mapMonthly[`${yr}-${String(i+1).padStart(2,'0')}`] || 0);
   chartMonthly = new Chart($("#cMonthly"), {
@@ -667,22 +676,9 @@ async function renderAnalytics(){
     }, horiz?{indexAxis:'y'}:{})
   });
 }
-function makeOptions(horizontal=false, maxVal=null){
-  const headroom = maxVal? Math.ceil(maxVal*1.15) : undefined;
-  const scales = horizontal
-    ? { x:{ grid:{color:'#eef2ff'}, suggestedMax: headroom }, y:{ grid:{color:'#f1f5f9'} } }
-    : { x:{ grid:{color:'#eef2ff'} }, y:{ grid:{color:'#f1f5f9'}, suggestedMax: headroom, ticks:{precision:0}} };
-  return {
-    responsive:true, maintainAspectRatio:false,
-    plugins:{ legend:{display:false},
-      datalabels:{ display: state.labels, anchor:'end', align: horizontal?'end':'top', offset:4, formatter:(v)=> (v==null||isNaN(v))?'':String(Math.round(v)) }
-    },
-    scales
-  };
-}
 
 /* ============================================================
-   QR 工程 (Station, universal) + Scan
+   QR 工程 (Station) + Scan
    ============================================================ */
 const STATION_PROCESSES = [ "レザー加工","曲げ加工","外注加工/組立","組立","検査工程","検査中","検査済","出荷準備","出荷（組立済）","出荷済" ];
 function qrUrl(payload, size=512){ return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(payload)}`; }
@@ -759,14 +755,14 @@ function quickQuantityPrompt(po, process, note=''){
     </div></dialog>`;
   document.body.appendChild(wrap);
   const dlg = wrap.querySelector("#dlgQuick"); dlg.showModal();
-  wrap.querySelector("#qCancel").onclick = ()=>{ dlg.close(); wrap.remove(); };
-  wrap.querySelector("#qSave").onclick = async ()=>{
+  wrap.querySelector("#qCancel")?.addEventListener('click', ()=>{ dlg.close(); wrap.remove(); }, false);
+  wrap.querySelector("#qSave")?.addEventListener('click', async ()=>{
     const ok = Number(wrap.querySelector("#qOK").value||0); const ng = Number(wrap.querySelector("#qNG").value||0);
     try{
       await jsonp("saveOp", { data: JSON.stringify({ po_id: po, process, ok_count: ok, ng_count: ng, note }), user: JSON.stringify(CURRENT_USER||{}) });
       dlg.close(); wrap.remove(); refreshAll();
     }catch(e){ alert("保存失敗: " + e.message); }
-  };
+  }, false);
 }
 
 /* ============================================================
