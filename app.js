@@ -1,158 +1,115 @@
-/* ======================================================
- *  東京精密発條株式会社システム — App Core
- *  - fast JSONP (with cleanup & timeout)
- *  - light cache
- *  - right-aligned nav kept (handled in index.html)
- *  - pages: Dash / Sales / Plan / Ship / Finished / Inv
- *  - add: Invoice (請求書) / Analytics (分析チャート)
- *  - charts: destroy-before-recreate (no “Canvas is already in use”)
- *  - QR Station (universal) + Scan + quick OK/NG prompt
- *  - Weather (Open-Meteo, cached)
- * =====================================================*/
-"use strict";
+/* =========================
+   app.js (stable, safe-bind)
+   ========================= */
 
-/* ---------- API base ---------- */
+/* ---------- Tiny DOM helpers ---------- */
+const $  = (q, el=document) => el.querySelector(q);
+const $$ = (q, el=document) => [...el.querySelectorAll(q)];
+function on(id, type, fn){ const el = (typeof id==='string') ? document.getElementById(id) : id; if(el) el.addEventListener(type, fn, false); }
+function onSel(sel, type, fn){ const el = document.querySelector(sel); if(el) el.addEventListener(type, fn, false); }
+const fmt = (d)=> d? new Date(d).toLocaleString("ja-JP"):"";
+
+/* ---------- Config ---------- */
 const API_BASE = "https://script.google.com/macros/s/AKfycbxf74M8L8PhbzSRR_b-A-3MQ7hqrDBzrJe-X_YXsoLIaC-zxkAiBMEt1H4ANZxUM1Q/exec";
 
-/* ---------- tiny helpers ---------- */
-const $ = (q, el = document) => el.querySelector(q);
-const $$ = (q, el = document) => Array.from(el.querySelectorAll(q));
-const fmt = (d) => (d ? new Date(d).toLocaleString("ja-JP") : "");
-const toYMD = (d) => {
-  const z = (n) => String(n).padStart(2, "0");
-  const dt = new Date(d);
-  if (isNaN(dt)) return "";
-  return `${dt.getFullYear()}-${z(dt.getMonth() + 1)}-${z(dt.getDate())}`;
-};
-const normalizeProc = (s) =>
-  String(s || "")
-    .trim()
-    .replace("レーサ加工", "レザー加工")
-    .replace("外作加工", "外注加工/組立") || "未設定";
-
-/* ---------- JSONP (stable) ---------- */
-function jsonp(action, params = {}, { timeoutMs = 20000 } = {}) {
-  return new Promise((resolve, reject) => {
+/* ---------- JSONP with timeout & cleanup ---------- */
+function jsonp(action, params={}, timeoutMs=20000){
+  return new Promise((resolve,reject)=>{
     const cb = "cb_" + Math.random().toString(36).slice(2);
-    const u = new URL(API_BASE);
-    const qp = { ...params, action, callback: cb };
-    Object.entries(qp).forEach(([k, v]) => u.searchParams.set(k, String(v)));
-
-    const s = document.createElement("script");
-    s.src = u.href;
-    let done = false;
-
-    const cleanup = () => {
-      if (done) return;
-      done = true;
-      delete window[cb];
-      s.remove();
-      clearTimeout(tid);
-    };
-
-    const tid = setTimeout(() => {
-      cleanup();
-      reject(new Error("API timeout"));
-    }, timeoutMs);
-
-    window[cb] = (resp) => {
-      cleanup();
-      if (resp && resp.ok) resolve(resp.data);
-      else reject(new Error((resp && resp.error) || "API error"));
-    };
-    s.onerror = () => {
-      cleanup();
-      reject(new Error("JSONP load error"));
-    };
+    const s  = document.createElement("script");
+    const t  = setTimeout(()=>{ cleanup(); reject(new Error("API timeout")); }, timeoutMs);
+    function cleanup(){ try{ delete window[cb]; s.remove(); }catch(_){} clearTimeout(t); }
+    window[cb] = (resp)=>{ cleanup(); if(resp && resp.ok){ resolve(resp.data); }else{ reject(new Error(resp?.error || "API error")); } };
+    const qs = (o)=> Object.entries(o).map(([k,v])=> `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join("&");
+    s.src = `${API_BASE}?${qs({...params, action, callback:cb})}`;
+    s.onerror = ()=>{ cleanup(); reject(new Error("JSONP load error")); };
     document.body.appendChild(s);
   });
 }
 
-/* ---------- Cache (memory) ---------- */
-const apiCache = new Map(); // key -> {v,t}
-async function cached(action, params = {}, ttlMs = 15000) {
-  const key = action + ":" + JSON.stringify(params || {});
+/* ---------- MEM cache (short) ---------- */
+const apiCache = new Map();
+async function cached(action, params={}, ttlMs=15000){
+  const key = action + ":" + JSON.stringify(params||{});
   const hit = apiCache.get(key);
   const now = Date.now();
-  if (hit && now - hit.t < ttlMs) return hit.v;
+  if(hit && now-hit.t < ttlMs) return hit.v;
   const v = await jsonp(action, params);
-  apiCache.set(key, { v, t: now });
+  apiCache.set(key, {v, t: now});
   return v;
 }
 
-/* =====================================================
- *  Auth & role
- * =====================================================*/
+/* ---------- Globals (role & user) ---------- */
 let CURRENT_USER = null;
 const ROLE_MAP = {
-  admin: { pages: ["pageDash", "pageSales", "pagePlan", "pageShip", "pageFinished", "pageInv", "pageInvoice", "pageCharts"], nav: true },
-  "営業": { pages: ["pageSales", "pageDash", "pageInvoice", "pageCharts"], nav: true },
-  "生産管理": { pages: ["pagePlan", "pageShip", "pageDash", "pageFinished", "pageInv", "pageInvoice", "pageCharts"], nav: true },
-  "生産管理部": { pages: ["pagePlan", "pageShip", "pageDash", "pageFinished", "pageInv", "pageInvoice", "pageCharts"], nav: true },
-  "製造": { pages: ["pageDash", "pageFinished"], nav: true },
-  "検査": { pages: ["pageDash", "pageFinished"], nav: true },
+  admin: { pages:['pageDash','pageSales','pagePlan','pageShip','pageFinished','pageInv','pageInvoice','pageAnalytics'], nav:true },
+  '営業': { pages:['pageSales','pageDash','pageFinished','pageInv','pageInvoice'], nav:true },
+  '生産管理': { pages:['pagePlan','pageShip','pageDash','pageFinished','pageInv','pageInvoice','pageAnalytics'], nav:true },
+  '生産管理部': { pages:['pagePlan','pageShip','pageDash','pageFinished','pageInv','pageInvoice','pageAnalytics'], nav:true },
+  '製造': { pages:['pageDash','pageFinished','pageInv'], nav:true },
+  '検査': { pages:['pageDash','pageFinished','pageInv'], nav:true }
 };
 
-function setUser(u) {
-  CURRENT_USER = u || null;
-  $("#userInfo").textContent = u ? `${u.role || ""} / ${u.department || ""}` : "";
-  const pages = ["authView", "pageDash", "pageSales", "pagePlan", "pageShip", "pageFinished", "pageInv", "pageInvoice", "pageCharts"];
-  pages.forEach((p) => $("#" + p)?.classList.add("hidden"));
-  // hide nav first
-  ["btnToDash","btnToSales","btnToPlan","btnToShip","btnToFinPage","btnToInvPage","btnToInvoice","btnToCharts","ddSetting","weatherWrap"].forEach(id => {
-    $("#" + id)?.classList.add("hidden");
-  });
-
-  if (!u) {
-    $("#authView").classList.remove("hidden");
-    return;
-  }
-  const allow = ROLE_MAP[u.role] || ROLE_MAP[u.department] || ROLE_MAP.admin;
-  if (allow?.nav) {
-    if (allow.pages.includes("pageDash")) $("#btnToDash").classList.remove("hidden");
-    if (allow.pages.includes("pageSales")) $("#btnToSales").classList.remove("hidden");
-    if (allow.pages.includes("pagePlan")) $("#btnToPlan").classList.remove("hidden");
-    if (allow.pages.includes("pageShip")) $("#btnToShip").classList.remove("hidden");
-    if (allow.pages.includes("pageFinished")) $("#btnToFinPage").classList.remove("hidden");
-    if (allow.pages.includes("pageInv")) $("#btnToInvPage").classList.remove("hidden");
-    if (allow.pages.includes("pageInvoice")) $("#btnToInvoice").classList.remove("hidden");
-    if (allow.pages.includes("pageCharts")) $("#btnToCharts").classList.remove("hidden");
-    $("#ddSetting").classList.remove("hidden");
-    $("#weatherWrap").classList.remove("hidden");
-    ensureWeather();
-    loadMasters();
-  }
-  show("pageDash");
-  refreshAll();
-}
-
-function show(id) {
-  ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageInv","pageInvoice","pageCharts"].forEach(p => $("#"+p)?.classList.add("hidden"));
+/* ---------- Page show/hide ---------- */
+function showPage(id){
+  const pages = ["authView","pageDash","pageSales","pagePlan","pageShip","pageFinished","pageInv","pageInvoice","pageAnalytics"];
+  pages.forEach(p => $("#"+p)?.classList.add("hidden"));
   $("#"+id)?.classList.remove("hidden");
 }
 
-/* nav bindings */
-$("#btnToDash").onclick = () => { show("pageDash"); refreshAll(); };
-$("#btnToSales").onclick = () => { show("pageSales"); loadSales(); };
-$("#btnToPlan").onclick = () => { show("pagePlan"); loadPlans(); };
-$("#btnToShip").onclick = () => { show("pageShip"); loadShips(); };
-$("#btnToFinPage").onclick = () => { show("pageFinished"); loadFinished(); };
-$("#btnToInvPage").onclick = () => { show("pageInv"); loadInventory(); };
-$("#btnToInvoice").onclick = () => { show("pageInvoice"); initInvoice(); };
-$("#btnToCharts").onclick = () => { show("pageCharts"); initCharts(); };
-$("#btnLogout").onclick = () => setUser(null);
+/* ---------- After login: control which nav visible ---------- */
+function setUser(u){
+  CURRENT_USER = u || null;
 
-/* login */
-$("#btnLogin").onclick = loginSubmit;
-$("#inUser").addEventListener("keydown", (e) => { if (e.key === "Enter") loginSubmit(); });
-$("#inPass").addEventListener("keydown", (e) => { if (e.key === "Enter") loginSubmit(); });
+  const navIds = ['btnToDash','btnToSales','btnToPlan','btnToShip','btnToFinPage','btnToInvPage','btnToInvoice','btnToAnalytics','ddSetting','weatherWrap'];
+  navIds.forEach(id=> $("#"+id)?.classList.add("hidden"));
+
+  // always hide pages first
+  showPage("authView");
+  $("#userInfo")?.textContent = u ? `${u.role||''} / ${u.department||''}` : "";
+
+  if(!u){ return; }
+
+  const allow = ROLE_MAP[u.role] || ROLE_MAP[u.department] || ROLE_MAP['admin'];
+  if(allow?.nav){
+    if(allow.pages.includes('pageDash')) $("#btnToDash")?.classList.remove("hidden");
+    if(allow.pages.includes('pageSales')) $("#btnToSales")?.classList.remove("hidden");
+    if(allow.pages.includes('pagePlan')) $("#btnToPlan")?.classList.remove("hidden");
+    if(allow.pages.includes('pageShip')) $("#btnToShip")?.classList.remove("hidden");
+    if(allow.pages.includes('pageFinished')) $("#btnToFinPage")?.classList.remove("hidden");
+    if(allow.pages.includes('pageInv')) $("#btnToInvPage")?.classList.remove("hidden");
+    if(allow.pages.includes('pageInvoice')) $("#btnToInvoice")?.classList.remove("hidden");
+    if(allow.pages.includes('pageAnalytics')) $("#btnToAnalytics")?.classList.remove("hidden");
+    $("#ddSetting")?.classList.remove("hidden");
+    $("#weatherWrap")?.classList.remove("hidden");
+    ensureWeather();
+    loadMasters();
+  }
+  showPage("pageDash");
+  refreshAll();   // initial load dashboard
+}
+
+/* ---------- Nav clicks (safe) ---------- */
+on('btnToDash', 'click', ()=>{ showPage('pageDash'); refreshAll(); });
+on('btnToSales','click', ()=>{ showPage('pageSales'); loadSales(); });
+on('btnToPlan','click',  ()=>{ showPage('pagePlan');  loadPlans(); });
+on('btnToShip','click',  ()=>{ showPage('pageShip');  loadShips(); });
+on('btnToFinPage','click',()=>{ showPage('pageFinished'); loadFinished(); });
+on('btnToInvPage','click', ()=>{ showPage('pageInv'); loadInventory(); });
+on('btnToInvoice','click', ()=>{ showPage('pageInvoice'); invoiceInit(); });
+on('btnToAnalytics','click',()=>{ showPage('pageAnalytics'); analyticsInit(); });
+
+/* ---------- Login ---------- */
+on('btnLogin','click', loginSubmit);
+on('inUser','keydown', e=>{ if(e.key==='Enter') loginSubmit(); });
+on('inPass','keydown', e=>{ if(e.key==='Enter') loginSubmit(); });
 
 async function loginSubmit(){
-  const u = $("#inUser").value.trim();
-  const p = $("#inPass").value.trim();
+  const u = $("#inUser")?.value?.trim();
+  const p = $("#inPass")?.value?.trim();
   if(!u || !p) return alert("ユーザー名 / パスワード を入力してください");
   try{
-    await jsonp("ping");
+    await jsonp('ping', {}, 8000);
     const me = await jsonp("login", { username:u, password:p });
     setUser(me);
   }catch(e){
@@ -160,24 +117,26 @@ async function loginSubmit(){
   }
 }
 
-/* =====================================================
- *  Dashboard (orders)
- * =====================================================*/
+on('btnLogout','click', ()=> setUser(null));
+
+/* ============================================================
+   DASHBOARD (minimal sample list + actions)
+   ============================================================ */
 let ORDERS = [];
 async function loadOrders(){
-  ORDERS = await cached("listOrders");
+  ORDERS = await cached("listOrders", {}, 10000).catch(()=>[]);
   renderOrders();
-  loadShipsMini();
+  loadShipsMini(); // side mini widgets
 }
 
+// incremental renderer (safe without requestIdleCallback)
 function renderOrders(){
-  const q = ($("#searchQ").value || "").trim().toLowerCase();
+  const q = ($("#searchQ")?.value||"").trim().toLowerCase();
   const rows = ORDERS.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-  const tb = $("#tbOrders");
+  const tb = $("#tbOrders"); if(!tb) return;
   tb.innerHTML = "";
-  const chunk = 120;
-  let i = 0;
-  function paint(){
+  const chunk=120; let i=0;
+  (function paint(){
     const end = Math.min(i+chunk, rows.length);
     const frag = document.createDocumentFragment();
     for(; i<end; i++){
@@ -186,55 +145,60 @@ function renderOrders(){
       const ok = (r.ok_count ?? 0);
       const ng = (r.ng_count ?? 0);
       tr.innerHTML = `
-        <td><div class="s muted">注番</div><div><b>${r.po_id||""}</b></div><div class="s muted">${r["得意先"]||"—"}</div></td>
-        <td>${r["品名"]||"—"}</td>
-        <td>${r["品番"]||"—"}</td>
-        <td>${r["図番"]||"—"}</td>
-        <td class="s">${r.status||"—"}</td>
-        <td class="s">${normalizeProc(r.current_process)}　OK:${ok} / NG:${ng}</td>
-        <td>${fmt(r.updated_at)}</td>
-        <td>${r.updated_by||"—"}</td>
         <td>
-          <div class="row">
-            <button class="chip btn-stqr">工程QR</button>
-            <button class="chip btn-scan" data-po="${r.po_id}">スキャン</button>
-            <button class="chip btn-op" data-po="${r.po_id}">手入力</button>
+          <div class="s muted">注番</div>
+          <div><b>${r.po_id||""}</b></div>
+          <div class="muted s">${r["得意先"]||"—"}</div>
+        </td>
+        <td>${r["品名"]||"—"}</td>
+        <td class="center">${r["品番"]||"—"}</td>
+        <td class="center">${r["図番"]||"—"}</td>
+        <td class="center">${r.status||"—"}</td>
+        <td class="center">
+          <div class="counts">
+            <span class="count ok">OK:${ok}</span>
+            <span class="count ng">NG:${ng}</span>
+          </div>
+        </td>
+        <td class="center">${fmt(r.updated_at)}</td>
+        <td class="center">${r.updated_by||"—"}</td>
+        <td class="center">
+          <div class="actions">
+            <button class="btn icon ghost btn-stqr" title="工程QR"><i class="fa-solid fa-qrcode"></i><span>工程QR</span></button>
+            <button class="btn icon ghost btn-scan" data-po="${r.po_id}" title="スキャン"><i class="fa-solid fa-camera"></i><span>スキャン</span></button>
+            <button class="btn icon ghost btn-op" data-po="${r.po_id}" title="手入力"><i class="fa-solid fa-keyboard"></i><span>手入力</span></button>
           </div>
         </td>`;
       frag.appendChild(tr);
     }
     tb.appendChild(frag);
-    if(i < rows.length) requestAnimationFrame(paint);
-    if(i >= rows.length){
+    if(i<rows.length){ setTimeout(paint, 0); }
+    else{
       $$(".btn-stqr",tb).forEach(b=> b.onclick = openStationQrSheet);
       $$(".btn-scan",tb).forEach(b=> b.onclick=(e)=> openScanDialog(e.currentTarget.dataset.po));
       $$(".btn-op",tb).forEach(b=> b.onclick=(e)=> openOpDialog(e.currentTarget.dataset.po));
     }
-  }
-  paint();
+  })();
 }
-$("#searchQ").addEventListener("input", ()=> renderOrders());
+on('searchQ','input', ()=> renderOrders());
+on('btnExportOrders','click', ()=> exportTableCSV("#tbOrders","orders.csv"));
+
 async function refreshAll(){ await loadOrders(); }
-$("#btnExportOrders").onclick = ()=> exportTableCSV("#tbOrders","orders.csv");
 
-/* 手入力 */
-const PROCESS_OPTIONS = [
-  "準備","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","検査中","検査済","出荷（組立済）","出荷準備","出荷済"
-];
+/* ---------- 手入力 (OK/NG) ---------- */
+const PROCESS_OPTIONS = [ "準備","レザー加工","曲げ加工","外注加工/組立","組立","検査工程","検査中","検査済","出荷（組立済）","出荷準備","出荷済" ];
 function openOpDialog(po, defaults = {}){
-  $("#opPO").textContent = po;
-  const sel = $("#opProcess");
-  sel.innerHTML = PROCESS_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join("");
-  $("#opProcess").value = defaults.process || PROCESS_OPTIONS[0];
-  $("#opOK").value = (defaults.ok_count ?? defaults.ok ?? "") === 0 ? 0 : (defaults.ok_count ?? defaults.ok ?? "");
-  $("#opNG").value = (defaults.ng_count ?? defaults.ng ?? "") === 0 ? 0 : (defaults.ng_count ?? defaults.ng ?? "");
-  $("#opNote").value = defaults.note || "";
-  $("#dlgOp").showModal();
+  $("#opPO") && ($("#opPO").textContent = po);
+  const sel = $("#opProcess"); if(!sel) return;
+  sel.innerHTML = PROCESS_OPTIONS.map(o=>`<option value="${o}">${o}</option>`).join('');
+  sel.value = defaults.process || PROCESS_OPTIONS[0];
+  $("#opOK")  && ($("#opOK").value = (defaults.ok_count ?? defaults.ok ?? "") === 0 ? 0 : (defaults.ok_count ?? defaults.ok ?? ""));
+  $("#opNG")  && ($("#opNG").value = (defaults.ng_count ?? defaults.ng ?? "") === 0 ? 0 : (defaults.ng_count ?? defaults.ng ?? ""));
+  $("#opNote")&& ($("#opNote").value = defaults.note || "");
+  $("#dlgOp")?.showModal();
 
-  $("#btnOpSave").onclick = async ()=>{
-    const okStr = $("#opOK").value;
-    const ngStr = $("#opNG").value;
-    const proc = $("#opProcess").value;
+  on('btnOpSave','click', async ()=>{
+    const okStr = $("#opOK").value; const ngStr = $("#opNG").value; const proc = $("#opProcess").value;
     if(!proc) return alert("工程を選択してください");
     if(okStr === "") return alert("OK 数を入力してください（0 以上）");
     if(ngStr === "") return alert("NG 数を入力してください（0 以上）");
@@ -242,238 +206,89 @@ function openOpDialog(po, defaults = {}){
     if(Number.isNaN(ok) || ok < 0) return alert("OK 数は 0 以上の数値で入力してください");
     if(Number.isNaN(ng) || ng < 0) return alert("NG 数は 0 以上の数値で入力してください");
     try{
-      await jsonp("saveOp", {
-        data: JSON.stringify({ po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value }),
-        user: JSON.stringify(CURRENT_USER||{})
-      });
-      $("#dlgOp").close();
-      // also close scan dialog if open
-      if($("#dlgScan").open){
-        if(scanRAF) cancelAnimationFrame(scanRAF);
-        if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
-        $("#dlgScan").close();
-      }
+      await jsonp("saveOp", { data: JSON.stringify({ po_id: po, process: proc, ok_count: ok, ng_count: ng, note: $("#opNote").value }), user: JSON.stringify(CURRENT_USER||{}) });
+      $("#dlgOp")?.close();
+      if($("#dlgScan")?.open){ stopScan(); $("#dlgScan").close(); }
       await refreshAll();
-    }catch(e){
-      alert("保存失敗: " + e.message);
-    }
-  };
+    }catch(e){ alert("保存失敗: " + e.message); }
+  });
 }
-$("#btnOpCancel").onclick = ()=> $("#dlgOp").close();
+on('btnOpCancel','click', ()=> $("#dlgOp")?.close());
 
-/* =====================================================
- *  Masters (for select lookup)
- * =====================================================*/
+/* ============================================================
+   MASTERS
+   ============================================================ */
 let MASTERS = { customers:[], drawings:[], item_names:[], part_nos:[], destinations:[], carriers:[], po_ids:[] };
-async function loadMasters(){
-  try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){ }
-}
+async function loadMasters(){ try{ MASTERS = await cached("listMasters", {}, 60000); }catch(_){} }
 
-/* =====================================================
- *  Sales (slim)
- * =====================================================*/
-const SALES_VIEW = [
-  {label:'受注日', keys:['受注日']},
-  {label:'得意先', keys:['得意先','customer']},
-  {label:'品名', keys:['品名','item_name']},
-  {label:'品番', keys:['品番','part_no','item_code']},
-  {label:'図番', keys:['図番','drawing_no']},
-  {label:'製番号', keys:['製番号','製造番号']},
-  {label:'数量', keys:['数量','qty']},
-  {label:'希望納期', keys:['希望納期','納期','due']},
-  {label:'備考', keys:['備考','note']}
-];
-
+/* ============================================================
+   SALES / PLAN / SHIP (list slim)
+   (Renderer ringkas—cukup untuk kompatibilitas layout)
+   ============================================================ */
 async function loadSales(){
-  const dat = await cached("listSales");
-  renderSalesSlim(dat);
+  const dat = await cached("listSales", {}, 15000).catch(()=>({header:[],rows:[]}));
+  renderTableSlim(dat, "#thSales", "#tbSales", "#salesSearch", "sales");
 }
-function renderSalesSlim(dat){
-  const th = $("#thSales"), tb = $("#tbSales"), search = $("#salesSearch");
-  const header = dat.header || [];
-  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
-  const keyPO = (idx['po_id']!=null ? 'po_id' : (idx['注番']!=null ? '注番' : header[0]));
-  const pick = (row, keys)=> { for(const k of keys){ const i = idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
-
-  th.innerHTML = `<tr>${SALES_VIEW.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr>`;
-
-  const render = ()=>{
-    const q = (search.value||'').toLowerCase();
-    tb.innerHTML = '';
-    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-    let i=0; const chunk=150;
-    (function paint(){
-      const end=Math.min(i+chunk, rows.length);
-      const frag=document.createDocumentFragment();
-      for(;i<end;i++){
-        const r = rows[i];
-        const po = String(r[idx[keyPO]]||'');
-        const tds = SALES_VIEW.map(col=>{
-          let v = pick(r, col.keys);
-          if(v && (col.label==='受注日' || col.label==='希望納期')){
-            const d = (v instanceof Date) ? v : new Date(v);
-            if(!isNaN(d)) v = d.toLocaleDateString('ja-JP');
-          }
-          return `<td>${v ?? ''}</td>`;
-        }).join('');
-        const tr=document.createElement('tr');
-        tr.innerHTML = `${tds}<td class="s">—</td>`;
-        frag.appendChild(tr);
-      }
-      tb.appendChild(frag);
-      if(i<rows.length) requestAnimationFrame(paint);
-    })();
-  };
-  if (search && !search._bind){ search._bind = true; search.oninput = render; }
-  render();
-}
-
-/* =====================================================
- *  Plans (slim)
- * =====================================================*/
-const PLAN_VIEW = [
-  {label:'注番', keys:['po_id','注番']},
-  {label:'得意先', keys:['得意先','customer']},
-  {label:'品番', keys:['品番','part_no']},
-  {label:'製造番号', keys:['製造番号','製番号']},
-  {label:'品名', keys:['品名','item_name']},
-  {label:'図番', keys:['図番','drawing_no']},
-  {label:'数量', keys:['qty','数量']},
-  {label:'納期希望', keys:['納期希望','due_date','完了予定','due']},
-  {label:'開始希望', keys:['開始希望','start_date','開始日']},
-  {label:'備考', keys:['備考','note']}
-];
 async function loadPlans(){
-  const dat = await cached("listPlans");
-  renderPlansSlim(dat);
+  const dat = await cached("listPlans", {}, 15000).catch(()=>({header:[],rows:[]}));
+  renderTableSlim(dat, "#thPlan", "#tbPlan", "#planSearch", "plan");
 }
-function renderPlansSlim(dat){
-  const th = $("#thPlan"), tb = $("#tbPlan"), search = $("#planSearch");
-  const header = dat.header || [];
-  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
-  const pick = (row, keys)=>{ for(const k of keys){ const i=idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
-  th.innerHTML = `<tr>${PLAN_VIEW.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr>`;
-  const render = ()=>{
-    const q = (search?.value||'').toLowerCase();
-    tb.innerHTML = '';
-    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-    let i=0; const chunk=150;
-    (function paint(){
-      const end=Math.min(i+chunk, rows.length);
-      const frag=document.createDocumentFragment();
-      for(;i<end;i++){
-        const r = rows[i];
-        const po = String((r[idx['po_id']] ?? r[idx['注番']] ?? '')||'');
-        const tds = PLAN_VIEW.map(col=>{
-          let v = pick(r, col.keys);
-          if(v && /希望/.test(col.label)){
-            const d=(v instanceof Date)?v:new Date(v);
-            if(!isNaN(d)) v = d.toLocaleDateString('ja-JP');
-          }
-          return `<td>${v ?? ''}</td>`;
-        }).join('');
-        const tr=document.createElement('tr');
-        tr.innerHTML = `${tds}<td class="s">—</td>`;
-        frag.appendChild(tr);
-      }
-      tb.appendChild(frag);
-      if(i<rows.length) requestAnimationFrame(paint);
-    })();
-  };
-  if(search && !search._bind){ search._bind = true; search.oninput = render; }
-  render();
-}
-
-/* =====================================================
- *  Ship (slim + mini lists)
- * =====================================================*/
-const SHIP_VIEW = [
-  {label:'注番', keys:['po_id','注番']},
-  {label:'得意先', keys:['得意先','customer']},
-  {label:'品名', keys:['品名','item_name']},
-  {label:'品番', keys:['品番','part_no']},
-  {label:'図番', keys:['図番','drawing_no']},
-  {label:'製番号', keys:['製造番号','製番号']},
-  {label:'数量', keys:['qty','数量']},
-  {label:'送り先', keys:['destination','送り先']},
-  {label:'出荷日', keys:['scheduled_date','出荷日']},
-  {label:'納入日', keys:['delivery_date','納入日']},
-  {label:'運送会社', keys:['carrier','運送会社']},
-  {label:'備考', keys:['note','備考']}
-];
 async function loadShips(){
-  const dat = await cached("listShip");
-  renderShipSlim(dat);
+  const dat = await cached("listShip", {}, 15000).catch(()=>({header:[],rows:[]}));
+  renderTableSlim(dat, "#thShip", "#tbShip", "#shipSearch", "ship");
 }
-function renderShipSlim(dat){
-  const th = $("#thShip"), tb = $("#tbShip"), search = $("#shipSearch");
-  const header = dat.header || [];
-  const idx = Object.fromEntries(header.map((h,i)=>[String(h).trim(), i]));
-  const pick = (row, keys)=>{ for(const k of keys){ const i=idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
-  th.innerHTML = `<tr>${SHIP_VIEW.map(c=>`<th>${c.label}</th>`).join('')}<th>操作</th></tr>`;
+function renderTableSlim(dat, thSel, tbSel, searchSel, tag){
+  const th = $(thSel), tb=$(tbSel), search=$(searchSel); if(!th||!tb) return;
+  th.innerHTML = `<tr>${(dat.header||[]).map(h=>`<th>${h}</th>`).join('')}</tr>`;
+  const rows = dat.rows||[];
   const render = ()=>{
-    const q = (search?.value||'').toLowerCase();
-    tb.innerHTML = '';
-    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-    let i=0; const chunk=150;
+    const q = (search?.value||"").toLowerCase();
+    const picked = rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+    tb.innerHTML = "";
+    const chunk=150; let i=0;
     (function paint(){
-      const end=Math.min(i+chunk, rows.length);
+      const end=Math.min(i+chunk, picked.length);
       const frag=document.createDocumentFragment();
       for(;i<end;i++){
-        const r = rows[i];
-        const tds = SHIP_VIEW.map(col=>{
-          let v = pick(r, col.keys);
-          if(v && /出荷日|納入日/.test(col.label)){
-            const d=(v instanceof Date)?v:new Date(v);
-            if(!isNaN(d)) v = d.toLocaleDateString('ja-JP');
-          }
-          return `<td>${v ?? ''}</td>`;
-        }).join('');
         const tr=document.createElement('tr');
-        tr.innerHTML = `${tds}<td class="s">—</td>`;
+        tr.innerHTML = (picked[i]||[]).map(c=>`<td>${c??''}</td>`).join('');
         frag.appendChild(tr);
       }
       tb.appendChild(frag);
-      if(i<rows.length) requestAnimationFrame(paint);
+      if(i<picked.length) setTimeout(paint,0);
     })();
   };
-  if(search && !search._bind){ search._bind = true; search.oninput = render; }
+  search && (search.oninput = ()=> render());
   render();
 }
 
-/* mini lists for dashboard side cards */
+/* ---------- Ship mini widgets ---------- */
 async function loadShipsMini(){
-  const dat = await cached("listShip", {}, 10000);
-  const rows = dat.rows || [];
-  const head = dat.header || [];
-  const idx = Object.fromEntries(head.map((h,i)=>[h,i]));
-  const today = new Date();
-  const ymd = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dat = await cached("listShip", {}, 10000).catch(()=>({header:[],rows:[]}));
+  const rows = dat.rows||[]; const head = dat.header||[]; const idx = Object.fromEntries(head.map((h,i)=>[h,i]));
+  const today = new Date(); const ymd = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const isToday = (s)=>{ const t = new Date(s); return t.getFullYear()===ymd.getFullYear() && t.getMonth()===ymd.getMonth() && t.getDate()===ymd.getDate(); };
-  const statusCol = idx.status ?? idx['状態'];
   const dateCol = idx.scheduled_date ?? idx['出荷日'] ?? idx['納期'];
   const poCol = idx.po_id ?? idx['注番'];
   const todayList = [], futureList = [];
   rows.forEach(r=>{
-    const st = String(r[statusCol]||'');
     const dt = r[dateCol];
-    if(!dt || /出荷済/.test(st)) return;
-    const entry = { po: r[poCol], date: dt, status: st, dest: r[idx.destination]||'' , qty: r[idx.qty]||'' };
+    if(!dt) return;
+    const entry = { po: r[poCol], date: dt };
     if(isToday(dt)) todayList.push(entry); else if(new Date(dt) > ymd) futureList.push(entry);
   });
-  const renderSide = (arr, el)=>{ el.innerHTML = arr.slice(0,50).map(e=> `
-    <div style="padding:6px 8px;border-bottom:1px dashed #eee">
-      <div><b>${e.po||''}</b> <span class="s">${e.dest||''}</span></div>
-      <div class="s" style="display:flex;justify-content:space-between"><span>${new Date(e.date).toLocaleDateString('ja-JP')}</span><span>${e.qty||''}</span></div>
-    </div>`).join('') || `<div class="s">なし</div>`;
-  };
-  const tEl = $("#shipToday"), pEl = $("#shipPlan");
-  if(tEl && pEl){ renderSide(todayList, tEl); renderSide(futureList, pEl); }
+  const renderSide = (arr, el)=>{ if(!el) return; el.innerHTML = arr.slice(0,50).map(e=>`
+    <div class="ship-item">
+      <div><b>${e.po||''}</b></div>
+      <div class="row-between s"><span>${new Date(e.date).toLocaleDateString('ja-JP')}</span></div>
+    </div>`).join('') || `<div class="muted s">なし</div>`; };
+  renderSide(todayList, $("#shipToday"));
+  renderSide(futureList, $("#shipPlan"));
 }
 
-/* =====================================================
- *  Finished (一覧) — fixed the “missing )” error
- * =====================================================*/
+/* ============================================================
+   FINISHED (fix error “missing ) after argument list”)
+   ============================================================ */
 const FIN_VIEW = [
   {label:'注番', keys:['po_id','注番']},
   {label:'得意先', keys:['得意先','customer']},
@@ -487,20 +302,16 @@ const FIN_VIEW = [
   {label:'更新者', keys:['updated_by']},
 ];
 async function loadFinished(){
-  const dat = await cached("listFinished", {}, 5000);
-  const th = $("#thFin"), tb = $("#tbFin"), search = $("#finSearch");
-  const head = dat.header||[];
-  const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
+  const dat = await cached("listFinished", {}, 5000).catch(()=>({header:[],rows:[]}));
+  const th = $("#thFin"), tb = $("#tbFin"), search = $("#finSearch"); if(!th||!tb) return;
+  const head = dat.header||[]; const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
   const pick = (row, keys)=>{ for(const k of keys){ const i=idx[k]; if(i!=null && row[i]!=null && row[i]!=='') return row[i]; } return ''; };
   th.innerHTML = `<tr>${FIN_VIEW.map(c=>`<th>${c.label}</th>`).join('')}</tr>`;
-
   const render = ()=>{
     const q = (search?.value||'').toLowerCase();
-    tb.innerHTML = '';
-    const rows = dat.rows.filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
-    let i=0; const chunk=150;
-
-    function paint(){
+    const rows = (dat.rows||[]).filter(r => !q || JSON.stringify(r).toLowerCase().includes(q));
+    tb.innerHTML = ''; let i=0; const chunk=150;
+    (function paint(){
       const end=Math.min(i+chunk, rows.length);
       const frag=document.createDocumentFragment();
       for(;i<end;i++){
@@ -513,62 +324,51 @@ async function loadFinished(){
           }
           return `<td>${v??''}</td>`;
         }).join('');
-        const tr=document.createElement('tr');
-        tr.innerHTML = tds;
-        frag.appendChild(tr);
+        const tr=document.createElement('tr'); tr.innerHTML = tds; frag.appendChild(tr);
       }
       tb.appendChild(frag);
-      if(i<rows.length) requestAnimationFrame(paint);
-    }
-    paint();
+      if(i<rows.length) setTimeout(paint,0);
+    })();
   };
-  if(search && !search._bind){ search._bind = true; search.oninput = render; }
+  search && (search.oninput = ()=> render());
   render();
 }
-$("#btnFinExport")?.addEventListener('click', ()=> exportTableCSV("#tbFin","finished_goods.csv"));
-$("#btnFinPrint")?.addEventListener('click', ()=> window.print());
+on('btnFinExport','click', ()=> exportTableCSV("#tbFin","finished_goods.csv"));
+on('btnFinPrint','click', ()=> window.print());
 
-/* =====================================================
- *  Inventory (在庫)
- * =====================================================*/
+/* ============================================================
+   INVENTORY (simple filter)
+   ============================================================ */
 const INV_UI = { cust:'', item:'' };
 async function loadInventory(){
   const dat = await cached("listInventory", {}, 5000).catch(()=>({header:['得意先','図番','機種','品名','在庫数','最終更新'], rows:[]}));
-  ensureInvControls(dat);
-  renderInventory(dat);
+  ensureInvControls(dat); renderInventory(dat);
 }
 function ensureInvControls(dat){
   if($("#invCtrlBar")) return;
-  const wrap = $("#thInv")?.closest(".card") || $("#pageInv");
+  const wrap = $("#thInv")?.closest(".card") || $("#pageInv"); if(!wrap) return;
   const bar = document.createElement("div");
-  bar.id = "invCtrlBar";
-  bar.className = "row";
-  bar.style.margin = "8px 0 12px";
-  const h = dat.header||[];
-  const idx = Object.fromEntries(h.map((x,i)=>[x,i]));
-  const colCust = idx['得意先'];
-  const colModel= (idx['機種']!=null ? idx['機種'] : idx['品名']);
+  bar.id = "invCtrlBar"; bar.className = "row wrap gap"; bar.style.margin = "8px 0 12px";
+  const h = dat.header||[]; const idx = Object.fromEntries(h.map((x,i)=>[x,i]));
+  const colCust = idx['得意先']; const colModel = (idx['機種']!=null ? idx['機種'] : idx['品名']);
   const setOpts = (values)=> [...new Set(values.filter(Boolean))].sort();
   const selCust = document.createElement("select");
-  selCust.className = "chip";
   selCust.innerHTML = `<option value="">(すべての得意先)</option>` + setOpts(dat.rows.map(r=> r[colCust]||'')).map(v=>`<option value="${v}">${v}</option>`).join('');
   const selItem = document.createElement("select");
-  selItem.className = "chip";
   selItem.innerHTML = `<option value="">(すべての機種/品名)</option>` + setOpts(dat.rows.map(r=> r[colModel]||r[idx['品名']]||'')).map(v=>`<option value="${v}">${v}</option>`).join('');
-  bar.append(selCust, selItem);
+  function makeLabel(txt, el){ const w=document.createElement("div"); w.className="row gap s"; w.innerHTML=`<div class="muted s" style="min-width:72px">${txt}</div>`; w.append(el); return w; }
+  bar.append(makeLabel("得意先", selCust), makeLabel("機種/品名", selItem));
   wrap.insertBefore(bar, wrap.querySelector(".table-wrap"));
   selCust.onchange = ()=>{ INV_UI.cust = selCust.value; renderInventory(dat); };
   selItem.onchange = ()=>{ INV_UI.item = selItem.value; renderInventory(dat); };
 }
 function renderInventory(dat){
-  const th = $("#thInv"), tb = $("#tbInv"), search = $("#invSearch");
-  th.innerHTML = `<tr>${dat.header.map(h=>`<th>${h}</th>`).join('')}</tr>`;
-  const h = dat.header||[];
-  const idx = Object.fromEntries(h.map((x,i)=>[x,i]));
-  const colCust = idx['得意先'];
-  const colModel= (idx['機種']!=null ? idx['機種'] : idx['品名']);
+  const th = $("#thInv"), tb = $("#tbInv"), search = $("#invSearch"); if(!th||!tb) return;
+  th.innerHTML = `<tr>${(dat.header||[]).map(h=>`<th>${h}</th>`).join('')}</tr>`;
+  const h = dat.header||[]; const idx = Object.fromEntries(h.map((x,i)=>[x,i]));
+  const colCust = idx['得意先']; const colModel= (idx['機種']!=null ? idx['機種'] : idx['品名']);
   const q = (search?.value||'').toLowerCase();
-  const rows = dat.rows.filter(r=>{
+  const rows = (dat.rows||[]).filter(r=>{
     if(INV_UI.cust && String(r[colCust]||'') !== INV_UI.cust) return false;
     if(INV_UI.item){
       const itemVal = String(r[colModel]||r[idx['品名']]||'');
@@ -576,8 +376,7 @@ function renderInventory(dat){
     }
     return !q || JSON.stringify(r).toLowerCase().includes(q);
   });
-  tb.innerHTML = '';
-  let i=0; const chunk=150;
+  tb.innerHTML = ''; let i=0; const chunk=150;
   (function paint(){
     const end=Math.min(i+chunk, rows.length);
     const frag=document.createDocumentFragment();
@@ -587,348 +386,355 @@ function renderInventory(dat){
       frag.appendChild(tr);
     }
     tb.appendChild(frag);
-    if(i<rows.length) requestAnimationFrame(paint);
+    if(i<rows.length) setTimeout(paint,0);
   })();
   if(search && !search._invBind){ search._invBind=true; search.oninput = ()=>renderInventory(dat); }
 }
-$("#btnInvExport")?.addEventListener('click', ()=> exportTableCSV("#tbInv","inventory.csv"));
-$("#btnInvPrint")?.addEventListener('click', ()=> window.print());
+on('btnInvExport','click', ()=> exportTableCSV("#tbInv","inventory.csv"));
+on('btnInvPrint','click', ()=> window.print());
 
-/* =====================================================
- *  請求書（Invoice）— minimal working
- * =====================================================*/
-let INV_STATE = { selectedCust:"", issueDate: toYMD(new Date()) };
-function initInvoice(){
-  // fill customer select
-  const sel = $("#invCustSel");
-  sel.innerHTML = `<option value="">（得意先を選択）</option>` + (MASTERS.customers||[]).map(c=>`<option value="${c}">${c}</option>`).join("");
-  $("#invIssueDate").value = INV_STATE.issueDate;
-  $("#tbInvCandidates").innerHTML = "";
-  $("#tbInvStatus").innerHTML = "";
-  $("#tbInvoiceList").innerHTML = "";
-  $("#invCustSel").onchange = async ()=>{
-    INV_STATE.selectedCust = $("#invCustSel").value;
-    await rebuildInvoiceTables();
-  };
-  $("#invIssueDate").onchange = ()=> INV_STATE.issueDate = $("#invIssueDate").value || toYMD(new Date());
-  $("#invRefresh").onclick = rebuildInvoiceTables;
-  $("#invSave").onclick = saveInvoiceCurrent;
-  $("#invPdf").onclick = exportInvoicePDF;
-  $("#invExcel").onclick = exportInvoiceExcel;
+/* ============================================================
+   請求書 (Invoice) – basic
+   ============================================================ */
+let INVOICE_STATE = { cust:'', issue_date:'', pending:[], picked:[], list:[] };
+
+function invoiceInit(){
+  // set controls
+  const sel = $("#invoiceCustomer"); if(sel){ sel.innerHTML = `<option value="">(得意先を選択)</option>` + (MASTERS.customers||[]).map(c=>`<option value="${c}">${c}</option>`).join(''); }
+  const d = $("#invoiceIssue"); if(d && !d.value){ const z=n=>String(n).padStart(2,'0'); const now=new Date(); d.value = `${now.getFullYear()}-${z(now.getMonth()+1)}-${z(now.getDate())}`; }
+  onSel('#invoiceCustomer','change', ()=> { INVOICE_STATE.cust = $("#invoiceCustomer").value; renderInvoiceTables(); });
+  on('btnInvoiceReload','click', renderInvoiceTables);
+  on('btnInvoiceSave','click', saveInvoice);
+  on('btnInvoiceXlsx','click', exportInvoiceExcel);
+  on('btnInvoicePdf','click', exportInvoicePdf);
+  renderInvoiceTables();
+  renderInvoiceList(); // existing invoices
 }
 
-async function rebuildInvoiceTables(){
-  const cust = INV_STATE.selectedCust;
-  if(!cust){ $("#tbInvCandidates").innerHTML = ""; $("#tbInvStatus").innerHTML=""; return; }
-  const ship = await cached("listShip", {}, 10000);
-  const h = ship.header||[]; const idx = Object.fromEntries(h.map((x,i)=>[String(x).trim(),i]));
-  const rows = (ship.rows||[]).filter(r => String(r[idx['得意先']]||r[idx['customer']]||'') === cust);
-
-  // “未請求”候補: status に「請求書済」以外
-  const cand = rows.filter(r => !/請求書済/.test(String(r[idx['状態']]||"")));
-  const tbody1 = $("#tbInvCandidates"); tbody1.innerHTML="";
-  const frag1 = document.createDocumentFragment();
-  cand.forEach(r=>{
-    const qty = Number(r[idx['qty']]||r[idx['数量']]||0);
-    const price = Number(r[idx['単価']]||0);
-    const amount = qty * price;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><input type="checkbox" class="ck-inv"></td>
-      <td>${r[idx['po_id']]||r[idx['注番']]||""}</td>
-      <td>${r[idx['品名']]||r[idx['item_name']]||""}</td>
-      <td>${r[idx['品番']]||r[idx['part_no']]||""}</td>
-      <td>${qty}</td>
-      <td>${price}</td>
-      <td>${amount}</td>
-      <td>${toYMD(r[idx['scheduled_date']]||r[idx['出荷日']]||"")}</td>`;
-    tr._raw = { po_id:r[idx['po_id']]||r[idx['注番']], item:r[idx['品名']]||"", part:r[idx['品番']]||"", qty, price, amount, ship_date: toYMD(r[idx['出荷日']]||r[idx['scheduled_date']]||"") };
-    frag1.appendChild(tr);
+async function renderInvoiceTables(){
+  const tb = $("#tbInvoicePending"); const cust = $("#invoiceCustomer")?.value||""; if(!tb) return;
+  tb.innerHTML = ""; INVOICE_STATE.pending = []; INVOICE_STATE.picked = [];
+  if(!cust){ tb.innerHTML = `<tr><td class="center muted" colspan="8">得意先を選択してください</td></tr>`; return; }
+  // sumber dari pengiriman (listShip)
+  const dat = await cached("listShip", {}, 15000).catch(()=>({header:[],rows:[]}));
+  const head = dat.header||[]; const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
+  const rows = (dat.rows||[]).filter(r => (String(r[idx['得意先']]||r[idx['customer']]||'')===cust));
+  // status “請求書済” (simulasi: kalau ada col status_invoice)
+  const colInv = idx['請求書']; // ex: 済 / 未
+  const pending = rows.filter(r => !colInv || !/済/.test(String(r[colInv]||'未'))).map(r=>{
+    const qty = Number(r[idx['qty']] || r[idx['数量']] || 0);
+    const unit = Number(r[idx['単価']] || 0);
+    const price = unit * qty;
+    return {
+      po: r[idx['po_id']]||r[idx['注番']]||'',
+      item: r[idx['品名']]||r[idx['item_name']]||'',
+      qty, unit, price,
+      ship: r[idx['delivery_date']]||r[idx['納入日']]||''
+    };
   });
-  tbody1.appendChild(frag1);
-
-  const tbody2 = $("#tbInvStatus"); tbody2.innerHTML="";
-  const frag2 = document.createDocumentFragment();
-  rows.forEach(r=>{
-    const st = String(r[idx['状態']]||"");
-    const tr = document.createElement("tr");
+  INVOICE_STATE.pending = pending;
+  if(!pending.length){ tb.innerHTML = `<tr><td class="center muted" colspan="8">対象データなし（請求書済）</td></tr>`; return; }
+  const frag = document.createDocumentFragment();
+  pending.forEach((r, i)=>{
+    const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${r[idx['po_id']]||r[idx['注番']]||""}</td>
-      <td>${r[idx['品名']]||""}</td>
-      <td>${r[idx['品番']]||""}</td>
-      <td>${r[idx['qty']]||r[idx['数量']]||""}</td>
-      <td>${r[idx['単価']]||""}</td>
-      <td>${(Number(r[idx['qty']]||r[idx['数量']]||0)*Number(r[idx['単価']]||0))||0}</td>
-      <td>${toYMD(r[idx['出荷日']]||r[idx['scheduled_date']]||"")}</td>
-      <td style="font-weight:700;color:${/済/.test(st)?"#16a34a":"#dc2626"}">${st||"請求書（未）"}</td>`;
-    frag2.appendChild(tr);
+      <td class="center"><input type="checkbox" data-i="${i}"></td>
+      <td>${r.po}</td>
+      <td>${r.item}</td>
+      <td class="right">${r.qty}</td>
+      <td class="right">${r.unit||0}</td>
+      <td class="right">${r.price||0}</td>
+      <td>${r.ship? new Date(r.ship).toLocaleDateString('ja-JP'):''}</td>`;
+    frag.appendChild(tr);
   });
-  tbody2.appendChild(frag2);
-
-  // invoice list minimal (optional—requires API)
-  try{
-    const list = await cached("listInvoice", { customer: cust }, 8000).catch(()=>({rows:[],header:[]}));
-    const tl = $("#tbInvoiceList"); tl.innerHTML = "";
-    (list.rows||[]).forEach(r=>{
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${r[0]||""}</td><td>${r[1]||""}</td><td>${r[2]||""}</td><td>${r[3]||""}</td><td>${r[4]||""}</td><td>${r[5]||""}</td>`;
-      tl.appendChild(tr);
-    });
-  }catch(_){}
+  tb.appendChild(frag);
+  $$('#tbInvoicePending input[type="checkbox"]').forEach(chk=>{
+    chk.onchange = ()=>{
+      const i = Number(chk.dataset.i);
+      if(chk.checked) INVOICE_STATE.picked.push(INVOICE_STATE.pending[i]);
+      else INVOICE_STATE.picked = INVOICE_STATE.picked.filter((_,ix)=> ix!==INVOICE_STATE.pending.indexOf(INVOICE_STATE.pending[i]));
+      invoiceUpdateTotals();
+    };
+  });
+  invoiceUpdateTotals();
 }
-
-async function saveInvoiceCurrent(){
-  const cust = INV_STATE.selectedCust;
+function invoiceUpdateTotals(){
+  const sum = INVOICE_STATE.picked.reduce((s,r)=> s + (Number(r.price)||0), 0);
+  $("#invoiceTotal") && ($("#invoiceTotal").textContent = new Intl.NumberFormat('ja-JP').format(sum));
+}
+async function saveInvoice(){
+  const cust = $("#invoiceCustomer")?.value||"";
   if(!cust) return alert("得意先を選択してください");
-  const issue = $("#invIssueDate").value || toYMD(new Date());
-  const picks = Array.from($("#tbInvCandidates").querySelectorAll("tr"))
-    .filter(tr => tr.querySelector(".ck-inv")?.checked)
-    .map(tr => tr._raw);
-  if(!picks.length) return alert("請求対象を選択してください");
-  if(!confirm(`請求書を保存しますか？\n得意先: ${cust}\n件数: ${picks.length}`)) return;
+  if(INVOICE_STATE.picked.length===0) return alert("請求項目を選択してください");
+  const issue = $("#invoiceIssue")?.value||"";
+  const payload = { customer:cust, issue_date: issue, items: INVOICE_STATE.picked, user: CURRENT_USER };
   try{
-    await jsonp("saveInvoice", {
-      customer: cust,
-      issue_date: issue,
-      items: JSON.stringify(picks),
-      user: JSON.stringify(CURRENT_USER||{})
-    }, { timeoutMs: 30000 });
-    alert("保存しました");
-    await rebuildInvoiceTables();
-  }catch(e){
-    alert("保存失敗: "+e.message);
-  }
+    await jsonp("saveInvoice", { data: JSON.stringify(payload) });
+    alert("請求書を保存しました");
+    INVOICE_STATE.picked = [];
+    renderInvoiceTables();
+    renderInvoiceList();
+  }catch(e){ alert("保存失敗: " + e.message); }
+}
+async function renderInvoiceList(){
+  // contoh ambil list dari API jika ada
+  const tb = $("#tbInvoiceList"); if(!tb) return;
+  tb.innerHTML = "";
+  const dat = await cached("listInvoice", {}, 10000).catch(()=>({rows:[]}));
+  const rows = dat.rows||[];
+  if(!rows.length){ tb.innerHTML = `<tr><td class="center muted" colspan="4">なし</td></tr>`; return; }
+  const frag = document.createDocumentFragment();
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.number||''}</td>
+      <td>${r.customer||''}</td>
+      <td>${r.issue_date? new Date(r.issue_date).toLocaleDateString('ja-JP'):''}</td>
+      <td class="right">${r.total||0}</td>`;
+    frag.appendChild(tr);
+  });
+  tb.appendChild(frag);
 }
 function exportInvoiceExcel(){
-  const rows = Array.from($("#tbInvCandidates").querySelectorAll("tr"))
-    .filter(tr => tr.querySelector(".ck-inv")?.checked)
-    .map(tr => tr._raw);
-  if(!rows.length) return alert("エクスポート対象を選択してください");
-  const aoa = [["注番","商品名","品番","数量","単価","金額","出荷日"]];
-  rows.forEach(r => aoa.push([r.po_id, r.item, r.part, r.qty, r.price, r.amount, r.ship_date]));
+  if(!window.XLSX){ alert("XLSX ライブラリが読み込まれていません"); return; }
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), "請求書");
-  const fn = `請求書_${INV_STATE.selectedCust||"得意先"}_${(INV_STATE.issueDate||toYMD(new Date())).replace(/-/g,"")}.xlsx`;
-  XLSX.writeFile(wb, fn);
+  const rows = [['注番','商品名','数量','単価','金額','出荷日']].concat(
+    INVOICE_STATE.picked.map(r=> [r.po, r.item, r.qty, r.unit, r.price, r.ship? new Date(r.ship).toLocaleDateString('ja-JP'):'' ])
+  );
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, '請求明細');
+  const cust = $("#invoiceCustomer")?.value||"";
+  const ymd = ($("#invoiceIssue")?.value||"").replaceAll('-','') || new Date().toISOString().slice(0,10).replaceAll('-','');
+  XLSX.writeFile(wb, `請求書_${cust||'未設定'}_${ymd}.xlsx`);
 }
-async function exportInvoicePDF(){
-  // server-side recommended; stub
-  alert("PDF出力はサーバ側生成を推奨（ここではExcelをご利用ください）");
+function exportInvoicePdf(){
+  if(!window.jspdf || !window.jspdf.jsPDF){ alert("jsPDF ライブラリが読み込まれていません"); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const cust = $("#invoiceCustomer")?.value||"";
+  const issue = $("#invoiceIssue")?.value||"";
+  doc.setFont("helvetica","bold");
+  doc.text("請求書", 105, 20, {align:'center'});
+  doc.setFont("helvetica","normal");
+  doc.text(`得意先: ${cust}`, 14, 30);
+  doc.text(`発行日: ${issue}`, 150, 30);
+  let y=42;
+  doc.text("注番 / 品名 / 数量 / 単価 / 金額 / 出荷日", 14, y);
+  y+=6;
+  INVOICE_STATE.picked.forEach(r=>{
+    const line = `${r.po} / ${r.item} / ${r.qty} / ${r.unit} / ${r.price} / ${r.ship? new Date(r.ship).toLocaleDateString('ja-JP'):''}`;
+    doc.text(line, 14, y); y+=6;
+    if(y>280){ doc.addPage(); y=20; }
+  });
+  doc.save("invoice.pdf");
 }
 
-/* =====================================================
- *  分析チャート (Charts)
- * =====================================================*/
-let chDaily, chMonthly, chCustTop, chCustMonthly;
-function destroyChart(ch){ if(ch && typeof ch.destroy==="function"){ try{ ch.destroy(); }catch(_){} } }
+/* ============================================================
+   ANALYTICS (Chart.js) – destroy-safe
+   ============================================================ */
+let chartDaily, chartMonthly, chartCust, chartCustMon;
 
-let CH_STATE = { range:"ytd", metric:"qty" };
-function metricLabel(){ return CH_STATE.metric === "count" ? "件数" : "数量"; }
-function metricValue(row, idxQty){ return CH_STATE.metric === "count" ? 1 : (+row[idxQty] || 0); }
+function destroyChart(c){ try{ c && c.destroy && c.destroy(); }catch(_){} }
 
-async function initCharts(){
-  // wire buttons once
-  if (!initCharts._wired) {
-    $("#pageCharts").addEventListener("click", (e)=>{
-      const r = e.target.closest("[data-range]"); if(r){ CH_STATE.range = r.dataset.range; renderCharts(); }
-      const m = e.target.closest("[data-metric]"); if(m){ CH_STATE.metric = m.dataset.metric; renderCharts(); }
+async function analyticsInit(){
+  // tombol & filter dasar
+  on('dailyOrient','click', ()=> { state.dailyOrient = (state.dailyOrient==='v'?'h':'v'); localSave(); renderAnalytics(); });
+  on('monthlyOrient','click', ()=> { state.monthlyOrient = (state.monthlyOrient==='v'?'h':'v'); localSave(); renderAnalytics(); });
+  on('custTypeBar','click', ()=> { state.custType='bar'; localSave(); renderAnalytics(); });
+  on('custTypeBarH','click',()=> { state.custType='barH'; localSave(); renderAnalytics(); });
+  on('custTypePie','click', ()=> { state.custType='pie'; localSave(); renderAnalytics(); });
+  on('custTypePareto','click',()=> { state.custType='pareto'; localSave(); renderAnalytics(); });
+  on('custTop','click', ()=> { state.custTop=(state.custTop===10?20:10); localSave(); renderAnalytics(); });
+  on('custMonTop','click',()=> { state.custMonTop=(state.custMonTop===6?10:6); localSave(); renderAnalytics(); });
+  on('custMonOrient','click',()=> { state.custMonOrient=(state.custMonOrient==='v'?'h':'v'); localSave(); renderAnalytics(); });
+  on('custMonMode','click', ()=> { state.custMonMode=(state.custMonMode==='month'?'year':'month'); localSave(); renderAnalytics(); });
+
+  renderAnalytics();
+}
+
+const LSKEY='analyticsState';
+const defaultState = { range:'ytd', metric:'qty', labels:true, interval:60000, status:null,
+  custType:'barH', custTop:10, custMonTop:6, custMonOrient:'v', custMonMode:'month', custMonType:'stacked',
+  dailyOrient:'v', monthlyOrient:'v'
+};
+let state = Object.assign({}, defaultState, readLS());
+function readLS(){ try{return JSON.parse(localStorage.getItem(LSKEY)||'{}')}catch{return{}} }
+function localSave(){ localStorage.setItem(LSKEY, JSON.stringify(state)); }
+
+async function renderAnalytics(){
+  if(!$("#pageAnalytics")) return;
+  const dat = await cached("listShip", {}, 20000).catch(()=>({header:[],rows:[]}));
+  const head = dat.header||[]; const idx = Object.fromEntries(head.map((h,i)=>[String(h).trim(), i]));
+  const dateCol = idx.scheduled_date ?? idx['出荷日'] ?? idx['納期'];
+  const custCol = idx['得意先'] ?? idx['customer'];
+  const qtyCol  = idx['qty'] ?? idx['数量'];
+
+  // aggregate
+  const mapDaily={}, mapMonthly={}, mapYearly={}, mapCust={}, mapCustMon={}, mapCustYear={};
+  (dat.rows||[]).forEach(r=>{
+    const d = new Date(r[dateCol]); if(isNaN(d)) return;
+    const cust = String(r[custCol]||'—');
+    const qty = Number(r[qtyCol]||0);
+    const z=n=>String(n).padStart(2,'0');
+    const day  = `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
+    const mon  = `${d.getFullYear()}-${z(d.getMonth()+1)}`;
+    const year = `${d.getFullYear()}`;
+    mapDaily[day]=(mapDaily[day]||0)+qty;
+    mapMonthly[mon]=(mapMonthly[mon]||0)+qty;
+    mapYearly[year]=(mapYearly[year]||0)+qty;
+    mapCust[cust]=(mapCust[cust]||0)+qty;
+    (mapCustMon[mon]||(mapCustMon[mon]={}))[cust]=(mapCustMon[mon][cust]||0)+qty;
+    (mapCustYear[year]||(mapCustYear[year]={}))[cust]=(mapCustYear[year][cust]||0)+qty;
+  });
+
+  // destroy old
+  destroyChart(chartDaily); destroyChart(chartMonthly); destroyChart(chartCust); destroyChart(chartCustMon);
+  if(!window.Chart) return;
+
+  Chart.register(window.ChartDataLabels||{});
+
+  /* Daily */
+  const dL = Object.keys(mapDaily).sort();
+  const dV = dL.map(k=>mapDaily[k]);
+  chartDaily = new Chart($("#cDaily"), {
+    type: state.dailyOrient==='h'?'bar':'line',
+    data: { labels:dL, datasets:[{ label:'数量', data:dV, tension:.25, fill: state.dailyOrient!=='h' }] },
+    options: makeOptions(state.dailyOrient==='h', Math.max(0,...dV))
+  });
+
+  /* Monthly YTD (12 month of current year) */
+  const now = new Date(); const yr=now.getFullYear(); const ytdLabels = Array.from({length:12}, (_,i)=>`${i+1}月`);
+  const ytdVals = ytdLabels.map((_,i)=> mapMonthly[`${yr}-${String(i+1).padStart(2,'0')}`] || 0);
+  chartMonthly = new Chart($("#cMonthly"), {
+    type:'bar',
+    data:{ labels:ytdLabels, datasets:[{ label:'数量', data:ytdVals }] },
+    options: Object.assign(makeOptions(state.monthlyOrient==='h', Math.max(0,...ytdVals)), state.monthlyOrient==='h'?{indexAxis:'y'}:{})
+  });
+
+  /* Customer Top */
+  const custTop = Object.entries(mapCust).sort((a,b)=>b[1]-a[1]).slice(0, state.custTop);
+  const cL = custTop.map(x=>x[0]); const cV=custTop.map(x=>x[1]);
+  if(state.custType==='pie'){
+    chartCust = new Chart($("#cCustTop"), {
+      type:'pie',
+      data:{ labels:cL, datasets:[{ data:cV }] },
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{position:'right'}, datalabels:{ display: state.labels } }
+      }
     });
-    $("#chExportExcel").onclick = exportChartsExcel;
-    $("#chExportPdf").onclick = exportChartsPDF;
-    initCharts._wired = true;
+  }else if(state.custType==='pareto'){
+    const total = cV.reduce((a,b)=>a+b,0)||1;
+    const cum=[]; cV.reduce((acc,v,i)=> (cum[i]=Math.round((acc+v)/total*100),acc+v),0);
+    chartCust = new Chart($("#cCustTop"), {
+      type:'bar',
+      data:{ labels:cL, datasets:[
+        { label:'数量', data:cV, yAxisID:'y' },
+        { label:'累積(%)', data:cum, type:'line', yAxisID:'y1', tension:.25, pointRadius:3 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:true}, datalabels:{ display: state.labels } },
+        scales:{ y:{beginAtZero:true}, y1:{position:'right',beginAtZero:true,max:100,grid:{drawOnChartArea:false}} }
+      }
+    });
+  }else{
+    const horiz = (state.custType==='barH');
+    chartCust = new Chart($("#cCustTop"), {
+      type:'bar',
+      data:{ labels:cL, datasets:[{ label:'数量', data:cV }] },
+      options: Object.assign(makeOptions(horiz, Math.max(0,...cV)), horiz?{indexAxis:'y'}:{})
+    });
   }
-  await renderCharts();
-}
 
-async function renderCharts(){
-  const ship = await cached("listShip", {}, 15000);
-  const h = ship.header||[]; const idx = Object.fromEntries(h.map((x,i)=>[String(x).trim(),i]));
-  const colDate = idx['出荷日'] ?? idx['scheduled_date'];
-  const colQty = idx['数量'] ?? idx['qty'];
-  const colCust = idx['得意先'] ?? idx['customer'];
-
-  const now = new Date();
-  const rows = (ship.rows||[]).filter(r=>{
-    const d = new Date(r[colDate]);
-    if (isNaN(d)) return false;
-    if (CH_STATE.range === "14d"){ const s = new Date(now); s.setDate(s.getDate()-13); s.setHours(0,0,0,0); return d>=s; }
-    if (CH_STATE.range === "30d"){ const s = new Date(now); s.setDate(s.getDate()-29); s.setHours(0,0,0,0); return d>=s; }
-    if (CH_STATE.range === "ytd"){ const s = new Date(now.getFullYear(),0,1); return d>=s; }
-    return true;
+  /* Customer Monthly/Yearly stacked */
+  const months = Object.keys(mapCustMon).sort();
+  const years  = Object.keys(mapCustYear).sort();
+  const topN = Object.entries(mapCust).sort((a,b)=>b[1]-a[1]).slice(0, state.custMonTop).map(x=>x[0]);
+  const labels = (state.custMonMode==='month'? months : years);
+  const datasets = topN.map(cn=>{
+    const data = labels.map(l=> (state.custMonMode==='month' ? (mapCustMon[l]?.[cn]||0) : (mapCustYear[l]?.[cn]||0)) );
+    return { label: cn, data };
   });
-
-  // daily
-  const mapD = new Map();
-  // monthly YTD (12 bars)
-  const mapM = new Map();
-  // cust total
-  const mapC = new Map();
-  rows.forEach(r=>{
-    const d = new Date(r[colDate]);
-    const kD = toYMD(d);
-    const kM = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-    const v = metricValue(r, colQty);
-    mapD.set(kD, (mapD.get(kD)||0)+v);
-    mapM.set(kM, (mapM.get(kM)||0)+v);
-    const cust = String(r[colCust]||"—");
-    mapC.set(cust, (mapC.get(cust)||0)+v);
-  });
-
-  const dailyLabels = Array.from(mapD.keys()).sort();
-  const dailyValues = dailyLabels.map(k=> mapD.get(k));
-  const currentYear = new Date().getFullYear();
-  const ytdLabels = Array.from({length:12}, (_,i)=> `${i+1}月`);
-  const ytdValues = ytdLabels.map((lab, i)=>{
-    const key = `${currentYear}-${String(i+1).padStart(2,"0")}`; return mapM.get(key)||0;
-  });
-  const custTop = Array.from(mapC.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  const custLabels = custTop.map(x=>x[0]);
-  const custValues = custTop.map(x=>x[1]);
-
-  // daily chart
-  destroyChart(chDaily);
-  chDaily = new Chart($("#chDaily"), {
-    type: "line",
-    data: { labels: dailyLabels, datasets: [{ label: metricLabel(), data: dailyValues, tension:.25, pointRadius:2 }] },
-    options: commonChartOptions()
-  });
-
-  // monthly YTD
-  destroyChart(chMonthly);
-  chMonthly = new Chart($("#chMonthly"), {
-    type: "bar",
-    data: { labels: ytdLabels, datasets: [{ label: metricLabel(), data: ytdValues }] },
-    options: commonChartOptions()
-  });
-
-  // customer top
-  destroyChart(chCustTop);
-  chCustTop = new Chart($("#chCustTop"), {
-    type: "bar",
-    data: { labels: custLabels, datasets: [{ label: metricLabel(), data: custValues }] },
-    options: Object.assign(commonChartOptions(), { indexAxis: 'y' })
-  });
-
-  // customer monthly stacked (top 6)
-  const top6 = Array.from(mapC.entries()).sort((a,b)=>b[1]-a[1]).slice(0,6).map(x=>x[0]);
-  const months = ytdLabels.map((_,i)=> `${currentYear}-${String(i+1).padStart(2,"0")}`);
-  const ds = top6.map(name=>{
-    return { label: name, data: months.map(k=> mapM.get(k) ? 0 /* simplified split unknown */ : 0) };
-  });
-  destroyChart(chCustMonthly);
-  chCustMonthly = new Chart($("#chCustMonthly"), {
-    type: "bar",
-    data: { labels: ytdLabels, datasets: ds },
-    options: Object.assign(commonChartOptions(), { scales:{ x:{ stacked:true }, y:{ stacked:true } }, plugins:{ legend:{ position:"bottom" } } })
-  });
-
-  function commonChartOptions(){
-    return {
+  const horiz = state.custMonOrient==='h';
+  chartCustMon = new Chart($("#cCustMon"), {
+    type:'bar',
+    data:{ labels, datasets },
+    options:Object.assign({
       responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, datalabels:{ display:false }, tooltip:{ mode:"index", intersect:false } },
-      scales:{ x:{ grid:{ color:"#eef2ff" } }, y:{ grid:{ color:"#f1f5f9" }, ticks:{ precision:0 } } }
-    };
-  }
+      plugins:{ legend:{position:'bottom'}, datalabels:{ display:false } },
+      scales: horiz
+        ? { x:{ stacked:true }, y:{ stacked:true, ticks:{precision:0} } }
+        : { x:{ stacked:true }, y:{ stacked:true, ticks:{precision:0} } }
+    }, horiz?{indexAxis:'y'}:{})
+  });
 }
-function exportChartsExcel(){
-  const wb = XLSX.utils.book_new();
-  const d1 = chDaily?.data || {labels:[],datasets:[{data:[]}]};
-  const d2 = chMonthly?.data || {labels:[],datasets:[{data:[]}]};
-  const d3 = chCustTop?.data || {labels:[],datasets:[{data:[]}]};
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["日付",metricLabel()], ...d1.labels.map((x,i)=>[x, d1.datasets[0].data[i]])]), "Daily");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["月",metricLabel()], ...d2.labels.map((x,i)=>[x, d2.datasets[0].data[i]])]), "MonthlyYTD");
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["顧客",metricLabel()], ...d3.labels.map((x,i)=>[x, d3.datasets[0].data[i]])]), "CustTop");
-  XLSX.writeFile(wb, "charts_export.xlsx");
-}
-async function exportChartsPDF(){
-  alert("PDF出力はサイズ調整が必要なため、当面はExcel出力をご利用ください。");
+function makeOptions(horizontal=false, maxVal=null){
+  const headroom = maxVal? Math.ceil(maxVal*1.15) : undefined;
+  const scales = horizontal
+    ? { x:{ grid:{color:'#eef2ff'}, suggestedMax: headroom }, y:{ grid:{color:'#f1f5f9'} } }
+    : { x:{ grid:{color:'#eef2ff'} }, y:{ grid:{color:'#f1f5f9'}, suggestedMax: headroom, ticks:{precision:0}} };
+  return {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false},
+      datalabels:{ display: state.labels, anchor:'end', align: horizontal?'end':'top', offset:4, formatter:(v)=> (v==null||isNaN(v))?'':String(Math.round(v)) }
+    },
+    scales
+  };
 }
 
-/* =====================================================
- *  QR Station (universal) + Scan
- * =====================================================*/
+/* ============================================================
+   QR 工程 (Station, universal) + Scan
+   ============================================================ */
 const STATION_PROCESSES = [ "レザー加工","曲げ加工","外注加工/組立","組立","検査工程","検査中","検査済","出荷準備","出荷（組立済）","出荷済" ];
-const QR_ACCEPT_PATTERNS = [
-  /^STN\|(.+)$/i, /^PROC[:|](.+)$/i, /^工程[:|](.+)$/
-];
-function qrUrl(payload, size=512){
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(payload)}`;
-}
+function qrUrl(payload, size=512){ return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(payload)}`; }
 function openStationQrSheet(){
   const tiles = STATION_PROCESSES.map(p=>{
     const payload = `STN|${p}`;
-    return `<div style="border:1px solid #e5e7eb;border-radius:14px;padding:12px;background:#fff;width:236px">
-      <img src="${qrUrl(payload)}" alt="QR ${p}" style="width:100%;height:auto;border-radius:8px"/>
-      <div style="margin-top:8px"><b>${p}</b></div>
-      <div class="s">${payload}</div>
-    </div>`;
+    return `<div class="tile"><img src="${qrUrl(payload)}" alt="QR ${p}"><div class="lbl"><b>${p}</b></div><div class="s muted">${payload}</div></div>`;
   }).join("");
-  const html = `
-    <html><head><meta charset="utf-8"><title>工程QR（Station, universal）</title>
-    <style>*{box-sizing:border-box} body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px;background:#fafafa;color:#111827}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(236px,1fr));gap:14px}
-    @media print{ .grid{gap:10px} }</style></head>
-    <body><div style="position:sticky;top:0;background:#fff;padding:8px 0;margin-bottom:8px">
-      <h2 style="margin:0 0 6px">工程QR（Station, universal）</h2>
-      <button onclick="window.print()">印刷</button></div>
-      <div class="grid">${tiles}</div></body></html>`;
-  const w = window.open("about:blank");
-  w.document.write(html);
-  w.document.close();
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>工程QR</title>
+  <style>body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial;margin:16px;background:#fafafa} .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(236px,1fr));gap:16px}
+  .tile{border:1px solid #e5e7eb;border-radius:14px;padding:12px;background:#fff} .tile img{width:100%;border-radius:8px}</style></head>
+  <body><div class="grid">${tiles}</div></body></html>`;
+  const w = window.open('about:blank'); w.document.write(html); w.document.close();
 }
-$("#btnStationQR")?.addEventListener("click", openStationQrSheet);
+on('miStationQR','click', openStationQrSheet);
+on('btnStationQR','click', openStationQrSheet);
 
+/* Scan dialog (jsQR) */
 let scanStream=null, scanRAF=null;
+function stopScan(){ try{ scanRAF && cancelAnimationFrame(scanRAF); }catch(_){ } try{ scanStream && scanStream.getTracks().forEach(t=> t.stop()); }catch(_){ } }
 function parseProcessFromStationQR(text){
-  for(const rx of QR_ACCEPT_PATTERNS){
-    const m = text.match(rx);
-    if(m) return normalizeProc(m[1]);
-  }
+  const map = [/^STN\|(.+)$/i, /^PROC[:|](.+)$/i, /^工程[:|](.+)$/i];
+  for(const rx of map){ const m = String(text||'').match(rx); if(m) return m[1]; }
   return null;
 }
 function openScanDialog(po){
-  $("#scanResult").textContent = `PO: ${po}`;
-  $("#dlgScan").showModal();
-  $("#btnScanStart").onclick = async ()=>{
-    const video = $("#scanVideo"), canvas=$("#scanCanvas");
+  const dlg=$("#dlgScan"); if(!dlg) return; $("#scanResult") && ($("#scanResult").textContent = `PO: ${po}`);
+  dlg.showModal();
+  on('btnScanStart','click', async ()=>{
+    const video = $("#scanVideo"), canvas=$("#scanCanvas"); if(!video||!canvas){ alert("Camera要素が見つかりません"); return; }
     try{
       scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-      video.srcObject = scanStream;
-      await video.play();
+      video.srcObject = scanStream; await video.play();
       const ctx = canvas.getContext("2d");
-      const tick = async ()=>{
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+      const tick = ()=>{
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
         ctx.drawImage(video, 0,0, canvas.width, canvas.height);
         const img = ctx.getImageData(0,0, canvas.width, canvas.height);
-        const code = jsQR(img.data, img.width, img.height);
+        const code = window.jsQR? jsQR(img.data, img.width, img.height) : null;
         if(code){
-          if(scanRAF) cancelAnimationFrame(scanRAF);
-          if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
+          stopScan();
           const raw = String(code.data||'').trim();
-          const stProc = parseProcessFromStationQR(raw);
-          if(stProc){
-            $("#scanResult").textContent = `工程QR: ${stProc}`;
-            quickQuantityPrompt(po, stProc);
-            return;
-          }
+          const proc = parseProcessFromStationQR(raw);
+          if(proc){ quickQuantityPrompt(po, proc); return; }
           const parts = raw.split('|');
           if(parts.length>=2){
-            const cPO = (parts[0]||'').trim();
-            const proc = normalizeProc(parts[1]||'');
-            const okv = Number(parts[2]||'');
-            const ngv = Number(parts[3]||'');
-            const note = parts[4]||'';
+            const cPO = (parts[0]||'').trim(); const p = (parts[1]||'').trim();
+            const okv = Number(parts[2]||'0'); const ngv = Number(parts[3]||'0'); const note = parts[4]||'';
             const po_id = cPO || po;
-            if(Number.isFinite(okv) || Number.isFinite(ngv)){
-              try{
-                await jsonp("saveOp", { data: JSON.stringify({ po_id, process: proc, ok_count: (Number.isFinite(okv)?okv:0), ng_count: (Number.isFinite(ngv)?ngv:0), note }), user: JSON.stringify(CURRENT_USER||{}) });
-                $("#scanResult").textContent = `保存: ${po_id} / ${proc} / OK=${okv||0} / NG=${ngv||0}`;
-                setTimeout(()=>{ $("#dlgScan").close(); refreshAll(); }, 700);
-              }catch(e){ alert("保存失敗: " + e.message); }
-              return;
-            }
-            quickQuantityPrompt(po_id, proc, note);
+            jsonp("saveOp", { data: JSON.stringify({ po_id, process:p, ok_count:okv||0, ng_count:ngv||0, note }), user: JSON.stringify(CURRENT_USER||{}) })
+              .then(()=>{ $("#scanResult").textContent = `保存: ${po_id} / ${p} / OK=${okv||0} / NG=${ngv||0}`; setTimeout(()=>{ dlg.close(); refreshAll(); }, 700); })
+              .catch(e=> alert("保存失敗: " + e.message));
             return;
           }
           alert("未対応のQR形式です。'STN|工程' または 'PO|工程|OK|NG|備考' を使用してください。");
@@ -937,38 +743,25 @@ function openScanDialog(po){
         scanRAF = requestAnimationFrame(tick);
       };
       tick();
-    }catch(e){
-      alert("Camera error: "+e.message);
-    }
-  };
+    }catch(e){ alert("Camera error: "+e.message); }
+  });
+  on('btnScanClose','click', ()=>{ stopScan(); dlg.close(); });
 }
-$("#btnScanClose").onclick = ()=>{
-  if(scanRAF) cancelAnimationFrame(scanRAF);
-  if(scanStream) scanStream.getTracks().forEach(t=> t.stop());
-  $("#dlgScan").close();
-};
-
 function quickQuantityPrompt(po, process, note=''){
-  const html = `<dialog id="dlgQuick" class="dlg">
-    <h3>${po} / ${process}</h3>
-    <div class="row">
-      <label>OK <input id="qOK" type="number" min="0" value="0" class="chip" style="width:120px"></label>
-      <label>NG <input id="qNG" type="number" min="0" value="0" class="chip" style="width:120px"></label>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <button class="chip" id="qSave">保存</button>
-      <button class="chip" id="qCancel">キャンセル</button>
-    </div>
-  </dialog>`;
   const wrap = document.createElement("div");
-  wrap.innerHTML = html;
+  wrap.innerHTML = `<dialog id="dlgQuick" class="dlg">
+    <h3>${po} / ${process}</h3>
+    <div class="row gap"><label>OK <input id="qOK" type="number" min="0" value="0" style="width:120px"></label>
+    <label>NG <input id="qNG" type="number" min="0" value="0" style="width:120px"></label></div>
+    <div class="row gap" style="margin-top:8px">
+      <button class="btn" id="qSave">保存</button>
+      <button class="btn ghost" id="qCancel">キャンセル</button>
+    </div></dialog>`;
   document.body.appendChild(wrap);
-  const dlg = wrap.querySelector("#dlgQuick");
-  dlg.showModal();
+  const dlg = wrap.querySelector("#dlgQuick"); dlg.showModal();
   wrap.querySelector("#qCancel").onclick = ()=>{ dlg.close(); wrap.remove(); };
   wrap.querySelector("#qSave").onclick = async ()=>{
-    const ok = Number(wrap.querySelector("#qOK").value||0);
-    const ng = Number(wrap.querySelector("#qNG").value||0);
+    const ok = Number(wrap.querySelector("#qOK").value||0); const ng = Number(wrap.querySelector("#qNG").value||0);
     try{
       await jsonp("saveOp", { data: JSON.stringify({ po_id: po, process, ok_count: ok, ng_count: ng, note }), user: JSON.stringify(CURRENT_USER||{}) });
       dlg.close(); wrap.remove(); refreshAll();
@@ -976,52 +769,41 @@ function quickQuantityPrompt(po, process, note=''){
   };
 }
 
-/* =====================================================
- *  Weather (Open-Meteo, cached in localStorage 30m)
- * =====================================================*/
+/* ============================================================
+   Cuaca (Open-Meteo, cached 30m)
+   ============================================================ */
 async function ensureWeather(){
   try{
-    const cacheKey = 'wx_cache_v1';
-    const cachedWX = JSON.parse(localStorage.getItem(cacheKey)||'null');
-    const now = Date.now();
-    if(cachedWX && (now - cachedWX.t) < 30*60*1000){
-      renderWeather(cachedWX.v); return;
-    }
+    const key='wx_cache_v1'; const cache=JSON.parse(localStorage.getItem(key)||'null'); const now=Date.now();
+    if(cache && (now-cache.t)< 30*60*1000){ renderWeather(cache.v); return; }
     let lat=35.6762, lon=139.6503;
     if(navigator.geolocation){
-      await new Promise(res=> navigator.geolocation.getCurrentPosition(
-        pos=>{ lat=pos.coords.latitude; lon=pos.coords.longitude; res(); },
-        ()=> res(),
-        {maximumAge: 600000, timeout: 1500}
-      ));
+      await new Promise(res=> navigator.geolocation.getCurrentPosition( pos=>{ lat=pos.coords.latitude; lon=pos.coords.longitude; res(); }, ()=> res(), {maximumAge: 600000, timeout: 1500} ));
     }
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m&timezone=auto`;
     const v = await fetch(url).then(r=>r.json());
-    localStorage.setItem(cacheKey, JSON.stringify({v,t:now}));
+    localStorage.setItem(key, JSON.stringify({v,t:now}));
     renderWeather(v);
-  }catch(_){}
+  }catch(_){ }
 }
 function renderWeather(v){
   if(!v?.current) return;
-  $("#wxTemp").textContent = Math.round(v.current.temperature_2m) + "°C";
-  $("#wxWind").textContent = Math.round(v.current.wind_speed_10m) + " m/s";
-  $("#wxPlace").textContent = v.timezone_abbreviation || "";
+  $("#wxTemp") && ($("#wxTemp").textContent = Math.round(v.current.temperature_2m) + "°C");
+  $("#wxWind") && ($("#wxWind").textContent = Math.round(v.current.wind_speed_10m) + " m/s");
+  $("#wxPlace") && ($("#wxPlace").textContent = v.timezone_abbreviation || "");
 }
 
-/* =====================================================
- *  Generic CSV export
- * =====================================================*/
+/* ============================================================
+   Generic CSV Export
+   ============================================================ */
 function exportTableCSV(tbodySel, filename){
-  const rows = $$(tbodySel+" tr").map(tr=> Array.from(tr.children).map(td=> td.textContent));
-  const csv = rows.map(r => r.map(v=>{
-    const s = (v??'').toString().replace(/"/g,'""'); return `"${s}"`;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a');
+  const rows = $$(tbodySel+" tr").map(tr=> [...tr.children].map(td=> td.textContent));
+  const csv = rows.map(r => r.map(v=>{ const s = (v??'').toString().replace(/"/g,'""'); return `"${s}"`; }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = filename; a.click();
 }
 
-/* =====================================================
- *  Init
- * =====================================================*/
+/* ============================================================
+   INIT
+   ============================================================ */
 document.addEventListener("DOMContentLoaded", ()=> setUser(null));
