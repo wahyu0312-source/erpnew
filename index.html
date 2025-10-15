@@ -4,8 +4,15 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>東京精密発條株式会社システム</title>
+
+  <!-- Preconnect untuk percepat CDN/API -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://script.google.com" crossorigin>
+
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
   <style>
     :root{
       --brand:#0ea5a6; --ink:#0f172a; --muted:#64748b; --bg:#f6f7fb;
@@ -33,15 +40,24 @@
     table{width:100%;border-collapse:collapse}
     th,td{border-top:1px solid var(--border);padding:10px;text-align:left;vertical-align:top;background:#fff}
     th{position:sticky;top:0;background:#f8fafc;z-index:1}
-    /* Top bar */
+
+    /* ===== Top bar ===== */
     .topbar{position:sticky;top:0;z-index:50;background:#0ea5a6;color:#fff}
-    .topbar-inner{height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 10px}
-    .nav{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .nav .btn{background:#0fb1b3;color:#fff;border-color:#0fb1b3}
-    .nav .btn.hidden{display:none}
-    .right{display:flex;gap:10px;align-items:center}
+    .topbar-inner{
+      height:56px;display:flex;align-items:center;gap:12px;padding:0 10px;
+    }
+    .brand{display:flex;align-items:center;gap:.5rem;font-weight:700}
+    .brand i{opacity:.9}
+    .top-right{
+      margin-left:auto; /* dorong semua ke sisi kanan */
+      display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end;min-width:0;
+    }
+    .nav{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;overflow:auto;max-width:100%}
+    .nav .btn{background:#0fb1b3;color:#fff;border-color:#0fb1b3;white-space:nowrap}
     .wx{display:flex;gap:8px;align-items:center}
+    .userwrap{display:flex;gap:8px;align-items:center}
     main{max-width:1400px;margin:18px auto;padding:0 14px 60px}
+
     /* Auth card */
     #authView .card{max-width:520px;margin:60px auto}
     input,select{height:36px;border:1px solid var(--border);border-radius:10px;padding:0 .7rem;background:#fff}
@@ -49,42 +65,46 @@
     .form-item{display:grid;gap:6px;margin:8px 0}
     dialog.dlg{border:0;border-radius:16px;box-shadow:var(--shadow);padding:14px}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-    @media (max-width:900px){ .grid2{grid-template-columns:1fr} }
-  </style>
-<style>
-  /* pastikan bar tombol kanan tetap nempel di sisi kanan */
-  .top-actions{ margin-left:auto; display:flex; gap:.5rem; align-items:center; justify-content:flex-end }
-  /* jaga agar badge cuaca juga ikut ke kanan */
-  #weatherWrap{ margin-left:.5rem }
-</style>
+    @media (max-width:900px){
+      .grid2{grid-template-columns:1fr}
+      .nav{order:3;width:100%} /* menu tetap ke kanan, tapi mengalir di baris baru */
+      .top-right{gap:8px}
+    }
 
-  <!-- Lib untuk features yang dipakai app.js -->
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    /* sentuhan kecil untuk keterbacaan */
+    .table-wrap::-webkit-scrollbar{height:8px}
+    .table-wrap::-webkit-scrollbar-thumb{background:#e2e8f0;border-radius:999px}
+  </style>
 </head>
 <body>
 
   <!-- ======= TOP BAR ======= -->
   <div class="topbar hidden" id="topBar">
     <div class="topbar-inner">
-      <div class="nav">
-        <button class="btn" id="btnToDash"><i class="fa-solid fa-gauge"></i> ダッシュボード</button>
-        <button class="btn" id="btnToSales"><i class="fa-regular fa-clipboard"></i> 受注</button>
-        <button class="btn" id="btnToPlan"><i class="fa-solid fa-list-check"></i> 生産計画</button>
-        <button class="btn" id="btnToShip"><i class="fa-solid fa-truck"></i> 出荷予定</button>
-        <button class="btn" id="btnToFinPage"><i class="fa-regular fa-circle-check"></i> 完成品一覧</button>
-        <button class="btn" id="btnToInvPage"><i class="fa-solid fa-boxes-stacked"></i> 在庫</button>
-        <button class="btn" id="btnToInvoice"><i class="fa-regular fa-file-lines"></i> 請求書</button>
-        <button class="btn" id="btnToAnalytics"><i class="fa-solid fa-chart-line"></i> 分析チャート</button>
-        <div class="btn" id="ddSetting">
-          <i class="fa-solid fa-gear"></i> 設定
-          <div class="chip" style="background:#0fb1b3;color:#fff;cursor:pointer" id="btnStationQR">工程QR</div>
-        </div>
+      <!-- Kiri: brand kecil; menu dipindah ke kanan -->
+      <div class="brand">
+        <i class="fa-solid fa-screwdriver-wrench"></i>
+        <span>TSH System</span>
       </div>
-      <div class="right">
-        <div id="weatherWrap" class="wx hidden">
+
+      <!-- Kanan: menu + cuaca + user + logout -->
+      <div class="top-right">
+        <div class="nav" id="navBtns">
+          <button class="btn" id="btnToDash"><i class="fa-solid fa-gauge"></i> ダッシュボード</button>
+          <button class="btn" id="btnToSales"><i class="fa-regular fa-clipboard"></i> 受注</button>
+          <button class="btn" id="btnToPlan"><i class="fa-solid fa-list-check"></i> 生産計画</button>
+          <button class="btn" id="btnToShip"><i class="fa-solid fa-truck"></i> 出荷予定</button>
+          <button class="btn" id="btnToFinPage"><i class="fa-regular fa-circle-check"></i> 完成品一覧</button>
+          <button class="btn" id="btnToInvPage"><i class="fa-solid fa-boxes-stacked"></i> 在庫</button>
+          <button class="btn" id="btnToInvoice"><i class="fa-regular fa-file-lines"></i> 請求書</button>
+          <button class="btn" id="btnToAnalytics"><i class="fa-solid fa-chart-line"></i> 分析チャート</button>
+          <div class="btn" id="ddSetting">
+            <i class="fa-solid fa-gear"></i> 設定
+            <div class="chip" style="background:#0fb1b3;color:#fff;cursor:pointer" id="btnStationQR">工程QR</div>
+          </div>
+        </div>
+
+        <div class="wx hidden" id="weatherWrap" aria-label="現在の天気">
           <i class="fa-regular fa-sun"></i>
           <span id="wxTemp">—</span>
           <span class="s muted">/</span>
@@ -92,8 +112,11 @@
           <span class="s muted">·</span>
           <span id="wxPlace" class="s">—</span>
         </div>
-        <div class="s" id="userInfo"> </div>
-        <button class="btn ghost" id="btnLogout"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
+
+        <div class="userwrap">
+          <div class="s" id="userInfo"> </div>
+          <button class="btn ghost" id="btnLogout"><i class="fa-solid fa-right-from-bracket"></i> ログアウト</button>
+        </div>
       </div>
     </div>
   </div>
@@ -105,11 +128,11 @@
         <h3 style="margin:0 0 12px"><i class="fa-solid fa-right-to-bracket"></i> ログイン</h3>
         <div class="form-item">
           <div class="s muted">ユーザー名</div>
-          <input id="inUser" placeholder="ユーザー名">
+          <input id="inUser" placeholder="ユーザー名" autocomplete="username">
         </div>
         <div class="form-item">
           <div class="s muted">パスワード</div>
-          <input id="inPass" type="password" placeholder="パスワード">
+          <input id="inPass" type="password" placeholder="パスワード" autocomplete="current-password">
         </div>
         <div class="row" style="margin-top:10px">
           <button id="btnLogin" class="btn primary">ログイン</button>
@@ -277,23 +300,21 @@
           </div>
         </div>
 
-        <!-- 未（候補） -->
         <div class="card" style="margin-top:10px">
           <div class="s muted" style="margin-bottom:6px">未（候補）</div>
           <div class="table-wrap">
             <table>
               <thead>
-              <tr>
-                <th>選択</th><th>注番</th><th>商品名</th><th>品番</th><th>数量</th>
-                <th>単価</th><th>金額</th><th>出荷日</th>
-              </tr>
+                <tr>
+                  <th>選択</th><th>注番</th><th>商品名</th><th>品番</th><th>数量</th>
+                  <th>単価</th><th>金額</th><th>出荷日</th>
+                </tr>
               </thead>
               <tbody id="tbInvoiceCandidates"></tbody>
             </table>
           </div>
         </div>
 
-        <!-- 得意先内 全件（ステータス） -->
         <div class="card" style="margin-top:10px">
           <div class="s muted" style="margin-bottom:6px">得意先内 全件（ステータス）</div>
           <div class="table-wrap">
@@ -310,7 +331,6 @@
         </div>
       </div>
 
-      <!-- 一覧 -->
       <div class="card" style="margin-top:14px">
         <h3 style="margin:0 0 10px">請求書一覧</h3>
         <div class="table-wrap">
@@ -320,75 +340,6 @@
             </thead>
             <tbody id="tbInvoiceList"></tbody>
           </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ======= ANALYTICS CHARTS ======= -->
-    <section id="pageAnalytics" class="hidden">
-      <div class="card">
-        <div class="toolbar">
-          <strong class="muted">範囲:</strong>
-          <button class="btn chip" data-range="ytd">年内</button>
-          <button class="btn chip" data-range="30d">30日</button>
-          <button class="btn chip" data-range="14d">14日</button>
-          <span id="monthlyFilters" class="wrap"></span>
-
-          <span style="width:12px"></span>
-          <strong class="muted">メトリクス:</strong>
-          <div class="row" id="metricToggle">
-            <button class="btn chip" data-metric="qty">数量</button>
-            <button class="btn chip" data-metric="count">件数</button>
-          </div>
-          <span id="metricBadge" class="chip">表示: —</span>
-        </div>
-
-        <div class="grid2" style="margin-top:8px">
-          <div class="card">
-            <div class="row">
-              <strong>出荷（日次）</strong>
-              <button class="btn" id="dailyOrient">縦</button>
-              <button class="btn" id="dailyExport">Export</button>
-            </div>
-            <div style="height:320px"><canvas id="dailyShip"></canvas></div>
-          </div>
-
-          <div class="card">
-            <div class="row">
-              <strong>出荷（月次・YTD）</strong>
-              <button class="btn" id="monthlyOrient">縦</button>
-              <button class="btn" id="monthlyExport">Export</button>
-            </div>
-            <div style="height:320px"><canvas id="monthlyQty"></canvas></div>
-          </div>
-
-          <div class="card">
-            <div class="row">
-              <strong id="hCust">顧客別 出荷（Top）</strong>
-              <button class="btn" id="custTypeBar">Bar</button>
-              <button class="btn" id="custTypeBarH">BarH</button>
-              <button class="btn" id="custTypePie">Pie</button>
-              <button class="btn" id="custTypePareto">Pareto</button>
-              <button class="btn" id="custTop">Top10</button>
-              <button class="btn" id="custExport">Export</button>
-            </div>
-            <div style="height:380px"><canvas id="custQty"></canvas></div>
-          </div>
-
-          <div class="card">
-            <div class="row">
-              <strong id="custMonTitle">顧客別 月次 出荷（YTD）</strong>
-              <button class="btn" id="custMonMode">月</button>
-              <button class="btn" id="custMonTypeStacked">Stacked</button>
-              <button class="btn" id="custMonTypePie">Pie</button>
-              <button class="btn" id="custMonTypePareto">Pareto</button>
-              <select id="custMonSelect" class="hidden"></select>
-              <button class="btn" id="custMonTop">Top6</button>
-              <button class="btn" id="custMonOrient">縦</button>
-              <button class="btn" id="custMonExport">Export</button>
-            </div>
-            <div style="height:380px"><canvas id="custMonthly"></canvas></div>
-          </div>
         </div>
       </div>
     </section>
@@ -445,6 +396,12 @@
       </div>
     </div>
   </dialog>
+
+  <!-- ======= Lib eksternal (defer) ======= -->
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
   <!-- ======= APP ======= -->
   <script defer src="app.js"></script>
